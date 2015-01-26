@@ -38,7 +38,7 @@ void drawWorld::draw(Vec3 start, Vec3 end){
 		object = new MatrixTransform();
 		scene->addChild(object);
 		object->setMatrix(m);
-		addCylinderBetweenPoints(start, end, RADIUS, currentColor, object);
+		addCylinderBetweenPoints(Vec3(0,0,0), end - start, RADIUS, currentColor, object);
 		ref_ptr<MatrixTransform> mt = new MatrixTransform();
 		m.makeTranslate(end - start);
 		mt->setMatrix(m);
@@ -50,7 +50,8 @@ void drawWorld::draw(Vec3 start, Vec3 end){
 	else{
 		Vec3 d = start - lastPosition;
 		if (d.length() <= THRESHOLD){	// contineous drawing
-			addCylinderBetweenPoints(lastPosition, end, RADIUS, currentColor, lastOne);
+			move(end);
+			addCylinderBetweenPoints(Vec3(0,0,0), end - lastPosition, RADIUS, currentColor, lastOne);
 			Matrixf m;
 			ref_ptr<MatrixTransform> mt = new MatrixTransform();
 			m.makeTranslate(end - lastPosition);
