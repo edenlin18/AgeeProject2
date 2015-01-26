@@ -24,6 +24,7 @@ gesture_code::swipe_type Utility::computeSwipeDirection(Gesture gesture) {
 	if (gesture.type() != Gesture::TYPE_SWIPE) {
 		return gesture_code::swipe_type::INVALID_SWIPE;
 	}
+
 	gesture_code::swipe_type result = gesture_code::swipe_type::INVALID_SWIPE;
 	SwipeGesture swipe = gesture;
 

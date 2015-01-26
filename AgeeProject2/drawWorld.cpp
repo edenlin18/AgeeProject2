@@ -17,9 +17,14 @@ std::vector<NodeInfo *> drawWorld::nodes;
 void drawWorld::init(){
 	// set up scene 
 	// light, shadow, floor, etc
-	scene->addChild(createBase(Vec3(0, 0, 0), 20.0));
-	cursor_mt = new MatrixTransform;
 	Matrixf m;
+	m.makeRotate(osg::inDegrees(90.0f), 1.0f, 0.0f, 0.0f);
+	ref_ptr<MatrixTransform> mt = new MatrixTransform;
+	mt->setMatrix(m);
+	mt->addChild(createBase(Vec3(0, 0, 0), 20.0));
+	scene->addChild(mt);
+	cursor_mt = new MatrixTransform;
+	
 	m.makeTranslate(0, 10, 0);
 	cursor_mt->setMatrix(m);
 	scene->addChild(cursor_mt);
@@ -65,6 +70,7 @@ void drawWorld::draw(Vec3 start, Vec3 end){
 			NodeInfo * ni = searchNearest(start);
 			move(ni->position);
 			lastOne = ni->node;
+			ready = false;
 		}
 	}
 }
@@ -92,7 +98,7 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 		if (ready){
 			end = Vec3(finger_x / 40, finger_y / 30, finger_z / 40);
 			Vec3 t = end - start;
-			if (t.length() > 1) {
+			if (t.length() > 2) {
 				draw(start, end);
 				ready = false;
 			}
@@ -118,7 +124,9 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 NodeInfo * drawWorld::searchNearest(Vec3 point){
 	double smallest = 10000;
 	int index = 0;
-	for (int i = 0; i < nodes.size(); i++){
+	int nodes_size = nodes.size();
+	std::cout << "node: " << nodes_size << std::endl;
+	for (int i = 0; i < nodes_size; i++) {
 		Vec3 d = point - nodes[i]->position;
 		double distance = d.length();
 		if (distance <= THRESHOLD)
@@ -257,4 +265,3 @@ Node* drawWorld::createBase(const osg::Vec3& center, float radius)
 
 	return geode;
 }
-

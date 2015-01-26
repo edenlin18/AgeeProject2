@@ -10,7 +10,7 @@ int main(int argc, char *argv []) {
 	osgViewer::Viewer viewer;
 	drawWorld::init();
 	osg::MatrixTransform* rootnode = new osg::MatrixTransform;
-	rootnode->setMatrix(osg::Matrix::rotate(osg::inDegrees(30.0f), 1.0f, 0.0f, 0.0f));
+	rootnode->setMatrix(osg::Matrix::rotate(osg::inDegrees(90.0f), 1.0f, 0.0f, 0.0f));
 	rootnode->addChild(drawWorld::getRoot());
 
 	// run optimization over the scene graph
@@ -21,7 +21,11 @@ int main(int argc, char *argv []) {
 	viewer.setSceneData(rootnode);
 
 	viewer.setCameraManipulator(new osgGA::TrackballManipulator());
-	viewer.run();
+	/*viewer.run();*/
+
+	// Keep this process running until Enter is pressed
+	/*std::cout << "Press Enter to quit..." << std::endl;
+	std::cin.get();*/
 
 	// Remove the sample listener when done
 	controller.removeListener(listener);
