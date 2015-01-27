@@ -5,9 +5,8 @@ using namespace osg;
 ref_ptr<osgShadow::ShadowedScene> drawWorld::shadowScene = new osgShadow::ShadowedScene();
 ref_ptr<Group> drawWorld::scene = new Group();
 ref_ptr<MatrixTransform> drawWorld::object = NULL;
-ref_ptr<MatrixTransform> drawWorld::lastOne = NULL;
+NodeInfo* drawWorld::lastOne = NULL;
 ref_ptr<MatrixTransform> drawWorld::cursor_mt = NULL;
-Vec3 drawWorld::lastPosition;
 Vec3 drawWorld::cursor;
 Vec3 drawWorld::offset = Vec3(0, 0, 0);
 Vec3 drawWorld::start;
@@ -15,6 +14,12 @@ Vec3 drawWorld::end;
 bool drawWorld::ready = false;
 Vec4 drawWorld::currentColor(0.2, 0.8, 0.1, 1.0);
 std::vector<NodeInfo *> drawWorld::nodes;
+
+btCompoundShape* drawWorld::compound = new btCompoundShape();
+std::vector<btRigidBody*> drawWorld::bodies;
+
+btTransform translate;
+btTransform rotate;
 
 void drawWorld::init(){
 	// set up scene 
@@ -29,7 +34,7 @@ void drawWorld::init(){
 	// shadow
 	osg::ref_ptr<osgShadow::ShadowMap> sm = new osgShadow::ShadowMap;
 	shadowScene->setShadowTechnique(sm.get());
-	shadowScene->addChild(ls.get());	shadowScene->addChild(scene);
+	shadowScene->addChild(ls.get());	shadowScene->addChild(scene.get());
 
 	
 	// floor
@@ -63,37 +68,41 @@ void drawWorld::draw(Vec3 _start, Vec3 _end){
 		object->setDataVariance(osg::Object::DYNAMIC);
 		scene->addChild(object);
 		object->setMatrix(m);
-		addCylinderBetweenPoints(Vec3(0,0,0), _end - _start, RADIUS, currentColor, object);
+		rotate = addCylinderBetweenPoints(Vec3(0,0,0), _end - _start, RADIUS, currentColor, object);
 		ref_ptr<MatrixTransform> mt = new MatrixTransform();
 		m.makeTranslate(_end - _start);
 		mt->setMatrix(m);
 		object->addChild(mt);
-		lastOne = mt;
-		lastPosition = _end;
-		nodes.push_back(new NodeInfo(mt, _end));
+		translate.setOrigin(btVector3(_start[0], _start[1], _start[2]));
+		btTransform bt = translate*rotate; 
+		// TODO add cylinder to compound
+		lastOne = new NodeInfo(mt, _end, bt);
+		nodes.push_back(lastOne);
 	}
 	else{
-		Vec3 d = start - lastPosition;
+		Vec3 d = start - lastOne->position;
 		if (d.length() <= THRESHOLD){	// continous drawing
 			move(_end);
-			addCylinderBetweenPoints(Vec3(0,0,0), _end - lastPosition, RADIUS, currentColor, lastOne);
+			rotate = addCylinderBetweenPoints(Vec3(0,0,0), _end - lastOne->position, RADIUS, currentColor, lastOne->node);
 			Matrixf m;
 			ref_ptr<MatrixTransform> mt = new MatrixTransform();
 			mt->setDataVariance(osg::Object::DYNAMIC);
-			m.makeTranslate(_end - lastPosition);
+			Vec3 t = _end - lastOne->position;
+			translate.setOrigin(btVector3(t[0], t[1], t[2]));
+			m.makeTranslate(t);
 			mt->setMatrix(m);
-			lastOne->addChild(mt);
-			lastOne = mt;
-			lastPosition = _end;
-			nodes.push_back(new NodeInfo(mt, _end));
+			lastOne->node->addChild(mt);
+			btTransform bt = lastOne->bt * translate * rotate;
+			// TODO add cylinder to compound
+			lastOne = new NodeInfo(mt, _end, bt);
+			nodes.push_back(lastOne);
 		}
 		else{	// need to search the nearest point
 			NodeInfo * ni = searchNearest(_start);
 			Vec3 t = cursor - ni->position;
 			offset = t / SENSITIVITY;
 			move(ni->position);
-			lastOne = ni->node;
-			lastPosition = ni->position;
+			lastOne = ni;
 			ready = false;
 		}
 	}
@@ -116,7 +125,7 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 	switch (mode){
 	case 0:
 	{
-		Vec3 t = Vec3(finger_x, finger_y, finger_z);
+		Vec3 t = Vec3(palm_x, palm_y, palm_z);
 		t -= offset;
 		t *= SENSITIVITY;
 		move(t);
@@ -124,7 +133,7 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 		break;
 	case 1:	//draw
 	{
-		Vec3 t = Vec3(finger_x, finger_y, finger_z);
+		Vec3 t = Vec3(palm_x, palm_y, palm_z);
 		t -= offset;
 		t *= SENSITIVITY;
 		move(t);
@@ -176,7 +185,8 @@ NodeInfo * drawWorld::searchNearest(Vec3 point){
 	return nodes[index];
 }
 
-void drawWorld::addCylinderBetweenPoints(Vec3 StartPoint,Vec3 EndPoint, float radius, Vec4 CylinderColor,Group *pAddToThisGroup)
+
+btTransform drawWorld::addCylinderBetweenPoints(Vec3 StartPoint,Vec3 EndPoint, float radius, Vec4 CylinderColor,Group *pAddToThisGroup)
 {
 	ref_ptr<Geode> geode = new osg::Geode;
 	osg::Vec3	center;
@@ -196,9 +206,13 @@ void drawWorld::addCylinderBetweenPoints(Vec3 StartPoint,Vec3 EndPoint, float ra
 
 	// Get CROSS product (the axis of rotation)
 	Vec3 t = z ^ p;
+	btVector3 bt_t(t[0], t[1], t[2]);
 
 	// Get angle. length is magnitude of the vector
 	double angle = acos((z * p) / p.length());
+	btTransform bt;
+	bt.setIdentity();
+	bt.setRotation(btQuaternion(bt_t, angle));
 
 	//	Create a cylinder between the two points with the given radius
 	cylinder = new Capsule(center, radius, height);
@@ -214,7 +228,9 @@ void drawWorld::addCylinderBetweenPoints(Vec3 StartPoint,Vec3 EndPoint, float ra
 
 	//	Add the cylinder between the two points to an existing group
 	pAddToThisGroup->addChild(geode);
+	return bt;
 }
+
 
 void drawWorld::addSphere(Vec3 center, float radius, Vec4 CylinderColor, Group *pAddToThisGroup)
 {
@@ -333,129 +349,10 @@ Node* drawWorld::createPlane(const Vec3& center, const Vec4& color, float radius
 
 }
 
-Node* drawWorld::createBase2(const osg::Vec3& center, float radius)
+
+btCylinderShape* drawWorld::addCylinder(float d, float h, btTransform& t)
 {
-
-	int numTilesX = 1;
-	int numTilesY = 1;
-
-	float width = 2 * radius;
-	float height = 2 * radius;
-
-	osg::Vec3 v000(center - osg::Vec3(width*0.5f, height*0.5f, 0.0f));
-	osg::Vec3 dx(osg::Vec3(width / ((float)numTilesX), 0.0, 0.0f));
-	osg::Vec3 dy(osg::Vec3(0.0f, height / ((float)numTilesY), 0.0f));
-
-	// fill in vertices for grid, note numTilesX+1 * numTilesY+1...
-	osg::Vec3Array* coords = new osg::Vec3Array;
-	int iy;
-	for (iy = 0; iy <= numTilesY; ++iy)
-	{
-		for (int ix = 0; ix <= numTilesX; ++ix)
-		{
-			coords->push_back(v000 + dx*(float)ix + dy*(float)iy);
-		}
-	}
-
-	//Just two colours - black and white.
-	osg::Vec4Array* colors = new osg::Vec4Array;
-	colors->push_back(osg::Vec4(0.5f, 0.5f, 0.5f, 1.0f)); // white
-	colors->push_back(osg::Vec4(0.0f, 0.0f, 0.0f, 1.0f)); // black
-
-	osg::ref_ptr<osg::DrawElementsUShort> whitePrimitives = new osg::DrawElementsUShort(GL_QUADS);
-	osg::ref_ptr<osg::DrawElementsUShort> blackPrimitives = new osg::DrawElementsUShort(GL_QUADS);
-
-	int numIndicesPerRow = numTilesX + 1;
-	for (iy = 0; iy<numTilesY; ++iy)
-	{
-		for (int ix = 0; ix<numTilesX; ++ix)
-		{
-			osg::DrawElementsUShort* primitives = ((iy + ix) % 2 == 0) ? whitePrimitives.get() : blackPrimitives.get();
-			primitives->push_back(ix + (iy + 1)*numIndicesPerRow);
-			primitives->push_back(ix + iy*numIndicesPerRow);
-			primitives->push_back((ix + 1) + iy*numIndicesPerRow);
-			primitives->push_back((ix + 1) + (iy + 1)*numIndicesPerRow);
-		}
-	}
-
-	// set up a single normal
-	osg::Vec3Array* normals = new osg::Vec3Array;
-	normals->push_back(osg::Vec3(0.0f, 0.0f, 1.0f));
-
-	osg::Geometry* geom = new osg::Geometry;
-	geom->setVertexArray(coords);
-
-	geom->setColorArray(colors, osg::Array::BIND_PER_PRIMITIVE_SET);
-
-	geom->setNormalArray(normals, osg::Array::BIND_OVERALL);
-
-	geom->addPrimitiveSet(whitePrimitives.get());
-	//geom->addPrimitiveSet(blackPrimitives.get());
-
-	osg::Geode* geode = new osg::Geode;
-	geode->addDrawable(geom);
-
-	return geode;
-}
-Node* drawWorld::createRectangle(osg::BoundingBox& bb,
-	const std::string& filename)
-{
-	osg::Vec3 top_left(bb.xMin(), bb.yMax(), bb.zMax());
-	osg::Vec3 bottom_left(bb.xMin(), bb.yMax(), bb.zMin());
-	osg::Vec3 bottom_right(bb.xMax(), bb.yMax(), bb.zMin());
-	osg::Vec3 top_right(bb.xMax(), bb.yMax(), bb.zMax());
-
-	// create geometry
-	osg::Geometry* geom = new osg::Geometry;
-
-	osg::Vec3Array* vertices = new osg::Vec3Array(4);
-	(*vertices)[0] = top_left;
-	(*vertices)[1] = bottom_left;
-	(*vertices)[2] = bottom_right;
-	(*vertices)[3] = top_right;
-	geom->setVertexArray(vertices);
-
-	osg::Vec2Array* texcoords = new osg::Vec2Array(4);
-	(*texcoords)[0].set(0.0f, 0.0f);
-	(*texcoords)[1].set(1.0f, 0.0f);
-	(*texcoords)[2].set(1.0f, 1.0f);
-	(*texcoords)[3].set(0.0f, 1.0f);
-	geom->setTexCoordArray(0, texcoords);
-
-	osg::Vec3Array* normals = new osg::Vec3Array(1);
-	(*normals)[0].set(0.0f, -1.0f, 0.0f);
-	geom->setNormalArray(normals, osg::Array::BIND_OVERALL);
-
-	osg::Vec4Array* colors = new osg::Vec4Array(1);
-	(*colors)[0].set(1.0f, 1.0f, 1.0f, 1.0f);
-	geom->setColorArray(colors, osg::Array::BIND_OVERALL);
-
-	geom->addPrimitiveSet(new osg::DrawArrays(GL_QUADS, 0, 4));
-
-	// disable display list so our modified tex coordinates show up
-	geom->setUseDisplayList(false);
-
-	// load image
-	osg::Image* img = osgDB::readImageFile(filename);
-
-	// setup texture
-	osg::TextureRectangle* texture = new osg::TextureRectangle(img);
-
-	osg::TexMat* texmat = new osg::TexMat;
-	texmat->setScaleByTextureRectangleSize(true);
-
-	// setup state
-	osg::StateSet* state = geom->getOrCreateStateSet();
-	state->setTextureAttributeAndModes(0, texture, osg::StateAttribute::ON);
-	state->setTextureAttributeAndModes(0, texmat, osg::StateAttribute::ON);
-
-	// turn off lighting
-	state->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-
-	// install 'update' callback
-	osg::Geode* geode = new osg::Geode;
-	geode->addDrawable(geom);
-	geode->setUpdateCallback(new TexturePanCallback(texmat));
-
-	return geode;
+	btCylinderShape* cylinder = new btCylinderShape(btVector3(d / 2.0, h / 2.0, d / 2.0));
+	compound->addChildShape(t, cylinder);
+	return cylinder;
 }
