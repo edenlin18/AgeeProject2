@@ -94,7 +94,7 @@ xcopy /yr ".\LeapSDK\lib\x64\msvcr120d.dll" "$(TargetDir)"</Command>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>.\LeapSDK\lib\x64;.\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>Leapd.lib;osgd.lib;osgGAd.lib;osgDBd.lib;osgViewerd.lib;osgTextd.lib;osgUtild.lib;OpenThreadsd.lib;BulletSoftBody_Debug.lib;BulletCollision_Debug.lib;BulletDynamics_Debug.lib;LinearMath_Debug.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Leapd.lib;osgd.lib;osgGAd.lib;osgDBd.lib;osgViewerd.lib;osgTextd.lib;osgUtild.lib;osgShadowd.lib;OpenThreadsd.lib;BulletSoftBody_Debug.lib;BulletCollision_Debug.lib;BulletDynamics_Debug.lib;LinearMath_Debug.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /yr ".\LeapSDK\lib\x64\Leapd.dll" "$(TargetDir)"
