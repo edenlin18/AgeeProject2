@@ -1,5 +1,5 @@
 #include "drawWorld.h"
-#include <limits>
+
 using namespace osg;
 
 ref_ptr<osgShadow::ShadowedScene> drawWorld::shadowScene = new osgShadow::ShadowedScene();
@@ -21,10 +21,12 @@ std::vector<btRigidBody*> drawWorld::bodies;
 btTransform translate;
 btTransform rotate;
 
+// concurrency::concurrent_queue<DrawCue> drawQ;
+// std::mutex mtx;           // mutex for critical section
+
 void drawWorld::init(){
 	// set up scene 
 	const int ReceivesShadowTraversalMask = 0x1;
-
 	const int CastsShadowTraversalMask = 0x2;
 	
 	// light, shadow, floor, etc
@@ -34,17 +36,14 @@ void drawWorld::init(){
 	ls->getLight()->setDiffuse(osg::Vec4(0.7, 0.7, 0.7, 1.0));
 	ls->getLight()->setSpecular(osg::Vec4(1.0, 1.0, 1.0, 1.0));
 
+	// shadow
 	shadowScene = new osgShadow::ShadowedScene;
 	shadowScene->setReceivesShadowTraversalMask(ReceivesShadowTraversalMask);
 	shadowScene->setCastsShadowTraversalMask(CastsShadowTraversalMask);
 	osg::ref_ptr<osgShadow::ViewDependentShadowMap> sm = new osgShadow::ViewDependentShadowMap;
 	shadowScene->setShadowTechnique(sm.get());
-	// shadow
-	
 	shadowScene->addChild(ls.get());
 	shadowScene->addChild(scene.get());
-
-
 	
 	// floor
 	Matrixf m;
@@ -56,8 +55,8 @@ void drawWorld::init(){
 	scene->addChild(mt);
 
 	// cursor
-	
 	cursor_mt = new MatrixTransform;
+	cursor_mt->setDataVariance(osg::Object::DYNAMIC);
 	m.makeTranslate(0, 10, 0);
 	cursor_mt->setMatrix(m);
 	scene->addChild(cursor_mt);
@@ -69,8 +68,22 @@ Node* drawWorld::getRoot(){
 	return shadowScene;
 }
 
-void drawWorld::draw(Vec3 _start, Vec3 _end){
-	if (lastOne == NULL){	// first time to draw
+void drawWorld::draw(Vec3 _start, Vec3 _end) {
+	// mtx.lock();
+
+	/* DrawCue draw;
+	Vec3 _start;
+	Vec3 _end;
+
+	if (drawQ.try_pop(draw)) {
+		_start = draw.start;
+		_end = draw.end;
+	}
+	else {
+		return;
+	}*/
+
+	if (lastOne == NULL) {	// first time to draw
 		Matrixf m;
 		m.makeTranslate(_start);
 		object = new MatrixTransform();
@@ -79,6 +92,7 @@ void drawWorld::draw(Vec3 _start, Vec3 _end){
 		object->setMatrix(m);
 		rotate = addCylinderBetweenPoints(Vec3(0,0,0), _end - _start, RADIUS, currentColor, object);
 		ref_ptr<MatrixTransform> mt = new MatrixTransform();
+		mt->setDataVariance(osg::Object::DYNAMIC);
 		m.makeTranslate(_end - _start);
 		mt->setMatrix(m);
 		object->addChild(mt);
@@ -89,8 +103,42 @@ void drawWorld::draw(Vec3 _start, Vec3 _end){
 		nodes.push_back(lastOne);
 	}
 	else{
-		Vec3 d = start - lastOne->position;
-		if (d.length() <= THRESHOLD){	// continous drawing
+		Vec3 d = _start - lastOne->position;
+		std::cout << "distance: " << d.length() << std::endl;
+		if (d.length() == 0) {
+			// ready = false;
+			return;
+		}
+
+		if (d.length() >= 1.0) {
+			NodeInfo * ni = searchNearest(_start);
+			Vec3 t = cursor - ni->position;
+			offset = t / SENSITIVITY;
+			move(ni->position);
+			lastOne = ni;
+			start = ni->position;
+			_start = ni->position;
+			_end = _end - (ni->position - cursor);
+			// ready = false;
+		}
+
+		move(_end);
+		rotate = addCylinderBetweenPoints(Vec3(0, 0, 0), _end - lastOne->position, RADIUS, currentColor, lastOne->node);
+		Matrixf m;
+		ref_ptr<MatrixTransform> mt = new MatrixTransform();
+		mt->setDataVariance(osg::Object::DYNAMIC);
+		Vec3 t = _end - lastOne->position;
+		translate.setOrigin(btVector3(t[0], t[1], t[2]));
+		m.makeTranslate(t);
+		mt->setMatrix(m);
+		lastOne->node->addChild(mt);
+		btTransform bt = lastOne->bt * translate * rotate;
+		// TODO add cylinder to compound
+		lastOne = new NodeInfo(mt, _end, bt);
+		nodes.push_back(lastOne);
+		// ready = false;
+		
+		/*if (d.length() <= THRESHOLD){	// continous drawing
 			move(_end);
 			rotate = addCylinderBetweenPoints(Vec3(0,0,0), _end - lastOne->position, RADIUS, currentColor, lastOne->node);
 			Matrixf m;
@@ -112,9 +160,11 @@ void drawWorld::draw(Vec3 _start, Vec3 _end){
 			offset = t / SENSITIVITY;
 			move(ni->position);
 			lastOne = ni;
-			ready = false;
-		}
+			start = ni->position;
+			// ready = false;
+		}*/
 	}
+	// mtx.unlock();
 }
 
 void drawWorld::erase(Vec3 start, Vec3 end){
@@ -122,17 +172,19 @@ void drawWorld::erase(Vec3 start, Vec3 end){
 }
 
 void drawWorld::move(Vec3 point){
+	// std::cout << "cursor position: (" << point[0] << ", " << point[1] << ", " << point[2] << ")" << std::endl;
 	cursor = point;
 	// update position of cursor
 	Matrixf m;
 	m.makeTranslate(point);
 	cursor_mt->setMatrix(m);
+	// start = point;
 }
 
 void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, float finger_z,
 	float palm_x, float palm_y, float palm_z){
 	switch (mode){
-	case 0:
+	case 0: // cursor
 	{
 		Vec3 t = Vec3(palm_x, palm_y, palm_z);
 		t -= offset;
@@ -140,18 +192,21 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 		move(t);
 	}
 		break;
-	case 1:	//draw
+	case 1:	// draw
 	{
 		Vec3 t = Vec3(palm_x, palm_y, palm_z);
 		t -= offset;
 		t *= SENSITIVITY;
+		// start = cursor;
 		move(t);
 		if (ready){
 			end = t;
 			Vec3 d = end - start;
-			double dis = d.length();
-			if (dis > 1) {
+			float dis = d.length();
+			// std::cout << "end - start: " << dis << std::endl;
+			if (dis > 1.0) {
 				draw(start, end);
+				// drawQ.push(DrawCue(start, end));
 				ready = false;
 			}
 		}
@@ -190,7 +245,8 @@ NodeInfo * drawWorld::searchNearest(Vec3 point){
 			index = i;
 		}
 	}
-	std::cerr << index << std::endl;
+
+	std::cout << "search check: " << index << std::endl;
 	return nodes[index];
 }
 
@@ -237,6 +293,7 @@ btTransform drawWorld::addCylinderBetweenPoints(Vec3 StartPoint,Vec3 EndPoint, f
 
 	//	Add the cylinder between the two points to an existing group
 	pAddToThisGroup->addChild(geode);
+
 	return bt;
 }
 
@@ -265,7 +322,6 @@ void drawWorld::addSphere(Vec3 center, float radius, Vec4 CylinderColor, Group *
 
 Node* drawWorld::createBase(const osg::Vec3& center, float radius)
 {
-
 	int numTilesX = 10;
 	int numTilesY = 10;
 
@@ -358,14 +414,14 @@ Node* drawWorld::createPlane(const Vec3& center, const Vec4& color, float radius
 	plane->setNormalArray(normals);
 
 	geode->addDrawable(plane);
+
 	return geode;
-
 }
-
 
 btCylinderShape* drawWorld::addCylinder(float d, float h, btTransform& t)
 {
 	btCylinderShape* cylinder = new btCylinderShape(btVector3(d / 2.0, h / 2.0, d / 2.0));
 	compound->addChildShape(t, cylinder);
+
 	return cylinder;
 }

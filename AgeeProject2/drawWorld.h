@@ -3,6 +3,10 @@
 
 #include <Windows.h>
 
+#include <limits>
+#include <ppl.h>
+#include <concurrent_queue.h>
+
 #include <osg/Node>
 #include <osg/Group>
 #include <osg/Geode>
@@ -31,13 +35,14 @@
 #include <BulletSoftBody/btSoftBodyHelpers.h>
 #include <BulletSoftBody/btSoftBodyRigidBodyCollisionConfiguration.h>
 
-
-
 #include <vector>
+
+#include <thread>         // std::thread
+#include <mutex>          // std::mutex
 
 #define RADIUS 0.1
 #define THRESHOLD 0.1
-#define SENSITIVITY 0.05
+#define SENSITIVITY 0.1
 
 using namespace osg;
 
@@ -52,6 +57,15 @@ struct NodeInfo{
 	}
 };
 
+/* struct DrawCue {
+	Vec3 start;
+	Vec3 end;
+	DrawCue() { }
+	DrawCue(Vec3 _start, Vec3 _end) {
+		start = _start;
+		end = _end;
+	}
+};*/
 
 class drawWorld{
 
@@ -61,10 +75,11 @@ public :
 	static Node* getRoot();
 	static void inputHandle(unsigned int mode, float finger_x, float finger_y, float finger_z,
 		float palm_x, float palm_y, float palm_z);
-	
+	static void draw(Vec3 _start, Vec3 _end);
+
 private :
-	static void draw(Vec3 start, Vec3 end);
-	static void erase(Vec3 start, Vec3 end);
+	// static void draw(Vec3 _start, Vec3 _end);
+	static void erase(Vec3 _start, Vec3 _end);
 	static void move(Vec3);
 	static void startFalling();
 	static Node* createBase(const osg::Vec3& center, float radius);

@@ -11,8 +11,8 @@ int main(int argc, char *argv []) {
 	viewer.setUpViewInWindow(50, 50, 800, 800);
 	Vec3d eye(0.0, 50.0, 50.0);
 	Vec3d center(0.0, 0.0, 0.0);
-	Vec3d up(0.0, 0.0, 1.0);
-	viewer.getCamera()->setViewMatrixAsLookAt(eye, center, up);
+	Vec3d up(0.0, 1.0, 0.0);
+	// viewer.getCamera()->setViewMatrixAsLookAt(eye, center, up);
 	drawWorld::init();
 	//osg::MatrixTransform* rootnode = new osg::MatrixTransform;
 	osg::Node* rootnode = drawWorld::getRoot();
@@ -26,8 +26,32 @@ int main(int argc, char *argv []) {
 	// set the scene to render
 	viewer.setSceneData(rootnode);
 
-	//viewer.setCameraManipulator(new osgGA::TrackballManipulator());
-	viewer.run();
+	osg::ref_ptr<osgGA::TrackballManipulator> trackBall = new osgGA::TrackballManipulator;
+	viewer.setCameraManipulator(trackBall);
+	viewer.getCameraManipulator()->setHomePosition(eye, center, up, false);
+	viewer.home();
+	// viewer.run();
+	viewer.realize();
+
+	while (!viewer.done()) {
+		// drawWorld::draw();
+		EventHandler current_event;
+		while (Utility::events.try_pop(current_event)) {
+			drawWorld::inputHandle(current_event.eventType, current_event.finger_x, 
+				current_event.finger_y, current_event.finger_z, current_event.palm_x, 
+				current_event.palm_y, current_event.palm_z);
+			
+			/*switch (current_event.eventType) {
+				case 1:
+					drawWorld::draw();
+					break;
+				default:
+					break;
+			}*/
+		}
+
+		viewer.frame();
+	}
 
 	// Keep this process running until Enter is pressed
 	/*std::cout << "Press Enter to quit..." << std::endl;

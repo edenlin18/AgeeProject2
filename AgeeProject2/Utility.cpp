@@ -1,9 +1,11 @@
 #include "Utility.h"
 
 bool debug_on = false;
+//std::mutex mtx;           // mutex for critical section
 
 swipeCallBackFunction Utility::swipeCallBack = NULL;
 inputModeCallBackFunction Utility::inputModeCallBack = NULL;
+concurrency::concurrent_queue<EventHandler> Utility::events;
 /*void Utility::registerSwipeLeftCallBack(swipeLeftCallBackFunction userSwipeLeftFunction) {
 	swipeLeftCallBack = userSwipeLeftFunction;
 }
@@ -63,8 +65,10 @@ gesture_code::swipe_type Utility::computeSwipeDirection(Gesture gesture) {
 		}
 	}
 
-	if (swipeCallBack != NULL)
+	if (swipeCallBack != NULL) {
 		swipeCallBack(result);
+	}
+
 	return result;
 }
 
@@ -132,9 +136,13 @@ bool Utility::computeInputMode(const Frame& frame) {
 		std::cout << "Mode: " << inputMode << std::endl;
 	}
 
-	if (inputModeCallBack != NULL)
-		inputModeCallBack(inputMode, rightIndexFingerPosition.x, rightIndexFingerPosition.y, 
-		rightIndexFingerPosition.z, rightPalmPosition.x, rightPalmPosition.y, rightPalmPosition.z);
+	if (inputModeCallBack != NULL) {
+		events.push(EventHandler(inputMode, rightIndexFingerPosition.x, rightIndexFingerPosition.y,
+			rightIndexFingerPosition.z, rightPalmPosition.x, rightPalmPosition.y, rightPalmPosition.z));
+		// inputModeCallBack(inputMode, rightIndexFingerPosition.x, rightIndexFingerPosition.y,
+			// rightIndexFingerPosition.z, rightPalmPosition.x, rightPalmPosition.y, rightPalmPosition.z);
+	}
+
 	return inputMode;
 }
 

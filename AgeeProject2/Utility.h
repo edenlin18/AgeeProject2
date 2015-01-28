@@ -1,4 +1,9 @@
 #pragma once
+
+#include <thread>         // std::thread
+#include <mutex>          // std::mutex
+#include <concurrent_queue.h>
+
 #include "Leap.h"
 
 using namespace Leap;
@@ -35,10 +40,33 @@ typedef void(*inputModeCallBackFunction)
 (unsigned int mode, float finger_x, float finger_y, float finger_z,
 float palm_x, float palm_y, float palm_z);
 
+struct EventHandler {
+	unsigned int eventType;
+	float finger_x;
+	float finger_y;
+	float finger_z;
+	float palm_x;
+	float palm_y;
+	float palm_z;
+	EventHandler() { }
+	EventHandler(unsigned int _eventType, float _finger_x, float _finger_y, float _finger_z,
+		float _palm_x, float _palm_y, float _palm_z) {
+		eventType = _eventType;
+		finger_x = _finger_x;
+		finger_y = _finger_y;
+		finger_z = _finger_z;
+		palm_x = _palm_x;
+		palm_y = _palm_y;
+		palm_z = _palm_z;
+	}
+};
+
 class Utility {
 	public:
 	static swipeCallBackFunction swipeCallBack;
 	static inputModeCallBackFunction inputModeCallBack;
+
+	static concurrency::concurrent_queue<EventHandler> events;
 
 	Utility();
 	static void registerSwipeCallBack(swipeCallBackFunction userSwipeUpFunction);
