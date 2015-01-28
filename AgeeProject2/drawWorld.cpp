@@ -23,18 +23,27 @@ btTransform rotate;
 
 void drawWorld::init(){
 	// set up scene 
+	const int ReceivesShadowTraversalMask = 0x1;
+
+	const int CastsShadowTraversalMask = 0x2;
 	
 	// light, shadow, floor, etc
 	osg::ref_ptr<osg::LightSource> ls = new osg::LightSource;
-	ls->getLight()->setPosition(osg::Vec4(0, 50, 0, 1.0)); // make 4th coord 1 for point
-	ls->getLight()->setAmbient(osg::Vec4(0.8, 0.8, 0.8, 1.0));
+	ls->getLight()->setPosition(osg::Vec4(0, 1, 0, 0.0)); // make 4th coord 1 for point
+	ls->getLight()->setAmbient(osg::Vec4(1.0, 1.0, 1.0, 1.0));
 	ls->getLight()->setDiffuse(osg::Vec4(0.7, 0.7, 0.7, 1.0));
 	ls->getLight()->setSpecular(osg::Vec4(1.0, 1.0, 1.0, 1.0));
 
-	// shadow
-	osg::ref_ptr<osgShadow::ShadowMap> sm = new osgShadow::ShadowMap;
+	shadowScene = new osgShadow::ShadowedScene;
+	shadowScene->setReceivesShadowTraversalMask(ReceivesShadowTraversalMask);
+	shadowScene->setCastsShadowTraversalMask(CastsShadowTraversalMask);
+	osg::ref_ptr<osgShadow::ViewDependentShadowMap> sm = new osgShadow::ViewDependentShadowMap;
 	shadowScene->setShadowTechnique(sm.get());
-	shadowScene->addChild(ls.get());	shadowScene->addChild(scene.get());
+	// shadow
+	
+	shadowScene->addChild(ls.get());
+	shadowScene->addChild(scene.get());
+
 
 	
 	// floor
@@ -42,7 +51,7 @@ void drawWorld::init(){
 	ref_ptr<MatrixTransform> mt = new MatrixTransform;
 	m.makeRotate(osg::inDegrees(90.0f), 1.0f, 0.0f, 0.0f);
 	mt->setMatrix(m);
-	//mt->addChild(createPlane(Vec3(0,0,0), Vec4(0.8,0.8,0.8,1.0), 20));
+	//scene->addChild(createPlane(Vec3(0,0,0), Vec4(1.0,1.0,1.0,1.0), 20));
 	mt->addChild(createBase(Vec3(0, 0, 0), 20));
 	scene->addChild(mt);
 
@@ -320,7 +329,7 @@ Node* drawWorld::createBase(const osg::Vec3& center, float radius)
 }
 
 Node* drawWorld::createPlane(const Vec3& center, const Vec4& color, float radius){
-	ref_ptr<Geode> geode = new Geode;
+	Geode * geode = new Geode;
 	ref_ptr<Geometry> plane = new Geometry;
 	ref_ptr<Vec3Array> vertice = new Vec3Array;
 	vertice->push_back(center - Vec3(radius, 0, radius));
@@ -343,6 +352,10 @@ Node* drawWorld::createPlane(const Vec3& center, const Vec4& color, float radius
 	colors->push_back(color);
 	plane->setColorArray(colors);
 	plane->setColorBinding(Geometry::BIND_PER_VERTEX);
+
+	osg::Vec3Array* normals = new osg::Vec3Array;
+	normals->push_back(osg::Vec3(0.0f, 1.0f, 0.0f));
+	plane->setNormalArray(normals);
 
 	geode->addDrawable(plane);
 	return geode;

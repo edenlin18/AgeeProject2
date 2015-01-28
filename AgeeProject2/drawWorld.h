@@ -20,14 +20,18 @@
 #include <osg/PositionAttitudeTransform>
 #include <osgGA/TrackballManipulator>
 #include <osgShadow/ShadowedScene>
-#include <osgShadow/ShadowMap>#include <btBulletDynamicsCommon.h>
+#include <osgShadow\ViewDependentShadowMap>
+
+#include <btBulletDynamicsCommon.h>
 #include <LinearMath/btTransform.h>
 #include <BulletCollision\CollisionShapes\btCylinderShape.h>
 #include <BulletCollision\CollisionShapes\btCompoundShape.h>
 #include <BulletSoftBody/btSoftRigidDynamicsWorld.h>
 #include <BulletSoftBody/btDefaultSoftBodySolver.h>
 #include <BulletSoftBody/btSoftBodyHelpers.h>
-#include <BulletSoftBody/btSoftBodyRigidBodyCollisionConfiguration.h>
+#include <BulletSoftBody/btSoftBodyRigidBodyCollisionConfiguration.h>
+
+
 
 #include <vector>
 
