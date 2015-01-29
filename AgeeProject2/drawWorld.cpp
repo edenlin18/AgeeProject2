@@ -32,7 +32,7 @@ void drawWorld::init(){
 	// light, shadow, floor, etc
 	osg::ref_ptr<osg::LightSource> ls = new osg::LightSource;
 	ls->getLight()->setPosition(osg::Vec4(0, 1, 0, 0.0)); // make 4th coord 1 for point
-	ls->getLight()->setAmbient(osg::Vec4(1.0, 1.0, 1.0, 1.0));
+	ls->getLight()->setAmbient(osg::Vec4(0.8, 0.8, 0.8, 1.0));
 	ls->getLight()->setDiffuse(osg::Vec4(0.7, 0.7, 0.7, 1.0));
 	ls->getLight()->setSpecular(osg::Vec4(1.0, 1.0, 1.0, 1.0));
 
@@ -68,7 +68,7 @@ Node* drawWorld::getRoot(){
 	return shadowScene;
 }
 
-void drawWorld::draw(Vec3 _start, Vec3 _end) {
+void drawWorld::draw() {
 	// mtx.lock();
 
 	/* DrawCue draw;
@@ -85,25 +85,26 @@ void drawWorld::draw(Vec3 _start, Vec3 _end) {
 
 	if (lastOne == NULL) {	// first time to draw
 		Matrixf m;
-		m.makeTranslate(_start);
+		m.makeTranslate(start);
 		object = new MatrixTransform();
 		object->setDataVariance(osg::Object::DYNAMIC);
 		scene->addChild(object);
 		object->setMatrix(m);
-		rotate = addCylinderBetweenPoints(Vec3(0,0,0), _end - _start, RADIUS, currentColor, object);
+		rotate = addCylinderBetweenPoints(Vec3(0,0,0), end - start, RADIUS, currentColor, object);
 		ref_ptr<MatrixTransform> mt = new MatrixTransform();
 		mt->setDataVariance(osg::Object::DYNAMIC);
-		m.makeTranslate(_end - _start);
+		m.makeTranslate(end - start);
 		mt->setMatrix(m);
 		object->addChild(mt);
-		translate.setOrigin(btVector3(_start[0], _start[1], _start[2]));
+		translate.setOrigin(btVector3(start[0], start[1], start[2]));
 		btTransform bt = translate*rotate; 
 		// TODO add cylinder to compound
-		lastOne = new NodeInfo(mt, _end, bt);
+		lastOne = new NodeInfo(mt, end, bt);
 		nodes.push_back(lastOne);
 	}
 	else{
-		Vec3 d = _start - lastOne->position;
+		Vec3 d = start - lastOne->position;
+		/*
 		std::cout << "distance: " << d.length() << std::endl;
 		if (d.length() == 0) {
 			// ready = false;
@@ -111,58 +112,58 @@ void drawWorld::draw(Vec3 _start, Vec3 _end) {
 		}
 
 		if (d.length() >= 1.0) {
-			NodeInfo * ni = searchNearest(_start);
+			NodeInfo * ni = searchNearest(start);
 			Vec3 t = cursor - ni->position;
 			offset = t / SENSITIVITY;
 			move(ni->position);
 			lastOne = ni;
 			start = ni->position;
-			_start = ni->position;
-			_end = _end - (ni->position - cursor);
+			end = end - (ni->position - cursor);
 			// ready = false;
 		}
 
-		move(_end);
-		rotate = addCylinderBetweenPoints(Vec3(0, 0, 0), _end - lastOne->position, RADIUS, currentColor, lastOne->node);
+		move(end);
+		rotate = addCylinderBetweenPoints(Vec3(0, 0, 0), end - lastOne->position, RADIUS, currentColor, lastOne->node);
 		Matrixf m;
 		ref_ptr<MatrixTransform> mt = new MatrixTransform();
 		mt->setDataVariance(osg::Object::DYNAMIC);
-		Vec3 t = _end - lastOne->position;
+		Vec3 t = end - lastOne->position;
 		translate.setOrigin(btVector3(t[0], t[1], t[2]));
 		m.makeTranslate(t);
 		mt->setMatrix(m);
 		lastOne->node->addChild(mt);
 		btTransform bt = lastOne->bt * translate * rotate;
 		// TODO add cylinder to compound
-		lastOne = new NodeInfo(mt, _end, bt);
+		lastOne = new NodeInfo(mt, end, bt);
 		nodes.push_back(lastOne);
 		// ready = false;
-		
-		/*if (d.length() <= THRESHOLD){	// continous drawing
-			move(_end);
-			rotate = addCylinderBetweenPoints(Vec3(0,0,0), _end - lastOne->position, RADIUS, currentColor, lastOne->node);
+		*/
+
+		if (d.length() <= 0.3){	// continous drawing
+			move(end);
+			rotate = addCylinderBetweenPoints(Vec3(0,0,0), end - lastOne->position, RADIUS, currentColor, lastOne->node);
 			Matrixf m;
 			ref_ptr<MatrixTransform> mt = new MatrixTransform();
 			mt->setDataVariance(osg::Object::DYNAMIC);
-			Vec3 t = _end - lastOne->position;
+			Vec3 t = end - lastOne->position;
 			translate.setOrigin(btVector3(t[0], t[1], t[2]));
 			m.makeTranslate(t);
 			mt->setMatrix(m);
 			lastOne->node->addChild(mt);
 			btTransform bt = lastOne->bt * translate * rotate;
 			// TODO add cylinder to compound
-			lastOne = new NodeInfo(mt, _end, bt);
+			lastOne = new NodeInfo(mt, end, bt);
 			nodes.push_back(lastOne);
 		}
 		else{	// need to search the nearest point
-			NodeInfo * ni = searchNearest(_start);
+			NodeInfo * ni = searchNearest(start);
 			Vec3 t = cursor - ni->position;
 			offset = t / SENSITIVITY;
 			move(ni->position);
 			lastOne = ni;
 			start = ni->position;
-			// ready = false;
-		}*/
+			ready = true;
+		}
 	}
 	// mtx.unlock();
 }
@@ -186,6 +187,7 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 	switch (mode){
 	case 0: // cursor
 	{
+		ready = false;
 		Vec3 t = Vec3(palm_x, palm_y, palm_z);
 		t -= offset;
 		t *= SENSITIVITY;
@@ -205,9 +207,10 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 			float dis = d.length();
 			// std::cout << "end - start: " << dis << std::endl;
 			if (dis > 1.0) {
-				draw(start, end);
-				// drawQ.push(DrawCue(start, end));
 				ready = false;
+				draw();
+				// drawQ.push(DrawCue(start, end));
+				
 			}
 		}
 		else{

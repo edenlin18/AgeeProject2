@@ -75,7 +75,7 @@ public :
 	static Node* getRoot();
 	static void inputHandle(unsigned int mode, float finger_x, float finger_y, float finger_z,
 		float palm_x, float palm_y, float palm_z);
-	static void draw(Vec3 _start, Vec3 _end);
+	static void draw();
 
 private :
 	// static void draw(Vec3 _start, Vec3 _end);
