@@ -95,19 +95,9 @@ void drawWorld::draw() {
 		object->setMatrix(m);
 
 
-		/*
-		btTransform startTransform;
-		startTransform.setIdentity();
-		startTransform.setOrigin(btVector3(start[0], start[1], start[2]));
-
-		compound_body->setCenterOfMassTransform(startTransform);
-		*/
-		// initCompound(btVector3(start[0], start[1], start[2]));
-
-
-
 		Vec3 center = (end + start) / 2;
-		initStart = Vec3(0, 10, 0);
+		//initStart = Vec3(0, 10, 0);
+		initStart = start;
 		m.makeTranslate(center);
 		ref_ptr<MatrixTransform> mt = new MatrixTransform;
 		
@@ -281,7 +271,7 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 	switch (mode){
 	case 0: // cursor
 	{
-		pMaterial->setDiffuse(Material::FRONT, Vec4(0.1,0.1,0.8,1.0));
+		pMaterial->setDiffuse(Material::FRONT, Vec4(0.1, 0.1, 0.8, 1.0));
 		cursor_geode->getOrCreateStateSet()->setAttribute(pMaterial, StateAttribute::OVERRIDE);
 		ready = false;
 		Vec3 t = Vec3(palm_x, palm_y, palm_z);
@@ -303,7 +293,7 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 			float dis = d.length();
 			// std::cout << "end - start: " << dis << std::endl;
 			if (dis > 1.0) {
-				pMaterial->setDiffuse(Material::FRONT, Vec4(0.8, 0.1, 0.1, 1.0));
+				pMaterial->setDiffuse(Material::FRONT, currentColor);
 				cursor_geode->getOrCreateStateSet()->setAttribute(pMaterial, StateAttribute::OVERRIDE);
 				ready = false;
 				draw();
@@ -322,16 +312,29 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 		break;
 
 	case 3:	// trackball
-		std::cout << "yeah" << std::endl;
+
 		pMaterial->setDiffuse(Material::FRONT, Vec4(0.1, 0.1, 0.8, 1.0));
 		cursor_geode->getOrCreateStateSet()->setAttribute(pMaterial, StateAttribute::OVERRIDE);
-		if (rts == false && lastOne != NULL) {
-			drawWorld::initPhysics();
+		if (lastOne != NULL) {
+			std::cout << "yeah" << std::endl;
+			//drawWorld::initPhysics();
+			addCompoundToWorld();
 			rts = true;
 		}
 		break;
 
 	case 4:	// invalid
+		break;
+	case 100:
+	{	double r = abs(palm_x) * 3;
+		double g = abs(palm_y) * 3;
+		double b = abs(palm_z) * 3;
+		Vec4 color = Vec4(r / 256.0, g / 256.0, b / 256.0, 1.0);
+		pMaterial->setDiffuse(Material::FRONT, color);
+		cursor_geode->getOrCreateStateSet()->setAttribute(pMaterial, StateAttribute::OVERRIDE);
+		currentColor = color;
+	}		break;
+	default:
 		break;
 
 	}
@@ -596,7 +599,6 @@ void drawWorld::drawCompound(btRigidBody* shape){
 			//std::cout << "pass3" << std::endl;
 			//system("PAUSE");
 			info->mt->setMatrix(osgM_rotation * osgM_translation);
-			std::cout << j << std::endl;
 			//info->mt->setMatrix
 		}
 	}
@@ -649,6 +651,49 @@ void drawWorld::drawRigidBody() {
 	}
 }
 
+void drawWorld::addCompoundToWorld(){
+	std::cerr << "fire";
+#ifdef SHIFT_TRANSFORM
+	btVector3 localInertia(0, 0, 0);
+	btTransform startTransform;
+	startTransform.setIdentity();
+	//startTransform.setIdentity();
+	//startTransform.setOrigin(btVector3(initStart[0], initStart[1], initStart[2]));
+	Vec3 v = lastOne->end;
+	startTransform.setOrigin(btVector3(v[0], v[1], v[2]));
+	btTransform shift;
+	shift.setIdentity();
+	btCompoundShape* newBoxCompound = shiftTransform(compound, 30, shift);
+	newBoxCompound->calculateLocalInertia(30, localInertia);
+	btDefaultMotionState* myMotionState = new btDefaultMotionState(startTransform*shift);
+	btRigidBody::btRigidBodyConstructionInfo rbInfo(30, myMotionState, newBoxCompound, localInertia);
+#else
+	boxCompound->calculateLocalInertia(mass, localInertia);
+	btDefaultMotionState* myMotionState = new btDefaultMotionState(startTransform);
+	btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, myMotionState, boxCompound, localInertia);
+#endif
+
+	//add compound into our world
+	//btMotionState* motion2 = new btDefaultMotionState(t);
+	//btRigidBody::btRigidBodyConstructionInfo info2(10, motion2, compound, btVector3(0, 0, 0));
+	//info2.m_restitution = 0.1f;
+	//info2.m_friction = 1.5f;
+	btRigidBody * compound_body = new btRigidBody(rbInfo);
+	
+
+	compound_body->setCenterOfMassTransform(startTransform);
+	compound_body->setAngularFactor(btVector3(1, 1, 1));
+	compound_body->setLinearFactor(btVector3(1, 1, 0.5f));
+	compound_body->setDamping(0.9, 0.3);
+	compound_body->setRestitution(0.3f);
+	compound_body->setFriction(0.4);
+	compound_body->forceActivationState(DISABLE_DEACTIVATION);
+	world->addRigidBody(compound_body);
+	bodies.push_back(compound_body);
+	compound = new btCompoundShape();
+	lastOne = NULL;
+}
+
 void drawWorld::initPhysics(){
 	
 	world->setGravity(btVector3(0, -10, 0));
@@ -667,6 +712,7 @@ void drawWorld::initPhysics(){
 	bodies.push_back(body);
 	body->setUserPointer(bodies[bodies.size() - 1]);
 	
+	/*
 #ifdef SHIFT_TRANSFORM
 	btVector3 localInertia(0, 0, 0);
 	btTransform startTransform;
@@ -703,7 +749,7 @@ void drawWorld::initPhysics(){
 	world->addRigidBody(compound_body);
 	bodies.push_back(compound_body);
 	//compound = new btCompoundShape();
-
+	*/
 }
 
 void drawWorld::simulate(float dt){

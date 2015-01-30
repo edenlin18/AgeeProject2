@@ -93,6 +93,7 @@ public:
 		float palm_x, float palm_y, float palm_z);
 	static void draw();
 	static void initPhysics();
+	static void addCompoundToWorld();
 	static void initCompound(btVector3 start);
 	static void simulate(float dt);
 	static bool readyToSimulate();
@@ -122,6 +123,7 @@ private:
 	static void drawCompound(btRigidBody* shape);
 	static void drawRigidBody();
 	static btCompoundShape* shiftTransform(btCompoundShape* boxCompound, btScalar mass, btTransform& shift);
+
 
 
 	static ref_ptr<osgShadow::ShadowedScene> shadowScene;

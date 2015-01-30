@@ -33,6 +33,7 @@ int main(int argc, char *argv []) {
 	// viewer.run();
 	viewer.realize();
 	osg::Timer_t frame_tick = osg::Timer::instance()->tick();
+	drawWorld::initPhysics();
 	while (!viewer.done()) {
 		// drawWorld::draw();
 		if (drawWorld::readyToSimulate()){
@@ -42,12 +43,15 @@ int main(int argc, char *argv []) {
 			drawWorld::simulate(dt);
 			// std::cout << "simulating" << std::endl;
 		}
+		//else{
+			EventHandler current_event;
+			while (Utility::events.try_pop(current_event)) {
+				drawWorld::inputHandle(current_event.eventType, current_event.finger_x,
+					current_event.finger_y, current_event.finger_z, current_event.palm_x,
+					current_event.palm_y, current_event.palm_z);
+		//}
 		
-		EventHandler current_event;
-		while (Utility::events.try_pop(current_event)) {
-			drawWorld::inputHandle(current_event.eventType, current_event.finger_x, 
-				current_event.finger_y, current_event.finger_z, current_event.palm_x, 
-				current_event.palm_y, current_event.palm_z);
+		
 			
 			/*switch (current_event.eventType) {
 				case 1:

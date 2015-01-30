@@ -77,7 +77,7 @@ bool Utility::computeInputMode(const Frame& frame) {
 	Leap::Hand leftHand = frame.hands().leftmost();
 
 	unsigned int rightHandFingers = 0;
-	// unsigned int leftHandFingers = 0;
+	unsigned int leftHandFingers = 0;
 	unsigned int inputMode = input_code::input_type::INVALID_MODE;
 
 	// check what fingers are extended in each hand
@@ -85,17 +85,19 @@ bool Utility::computeInputMode(const Frame& frame) {
 		if (rightHand.fingers()[counter].isExtended())
 			rightHandFingers += counter + 1;
 
-		// if (leftHand.fingers()[counter].isExtended())
-		// leftHandFingers += counter + 1;
+		if (frame.hands().count() == 2 && leftHand.fingers()[counter].isExtended())
+			leftHandFingers += counter + 1;
 	}
 
 	if (debug_on) {
 		std::cout << "Right Hand Fingers: " << rightHandFingers << std::endl;
-		// std::cout << "Left Hand Fingers: " << leftHandFingers << std::endl;
+		std::cout << "Left Hand Fingers: " << leftHandFingers << std::endl;
 	}
-
+	std::cout << "Hands: " << frame.hands().count() << std::endl;
+	std::cout << "Left Hand Fingers: " << leftHandFingers << std::endl;
 	// deciding mode
-	switch (rightHandFingers) {
+	if (frame.hands().count() == 1) {
+		switch (rightHandFingers) {
 		case 5:
 			inputMode = input_code::input_type::CURSOR_MODE;
 			break;
@@ -107,6 +109,17 @@ bool Utility::computeInputMode(const Frame& frame) {
 			break;
 		default:
 			break;
+		}
+	}
+	else
+	{
+		switch (leftHandFingers) {
+		case 15:
+			inputMode = 100;
+			break;
+		default:
+			break;
+		}
 	}
 
 	// deciding mode
@@ -140,20 +153,29 @@ bool Utility::computeInputMode(const Frame& frame) {
 		break;
 		}*/
 
-	Leap::Vector rightPalmPosition = rightHand.palmPosition();
-	Leap::Vector rightIndexFingerPosition = (rightHand.fingers())[1].tipPosition();
+	Leap::Vector palmPosition;
+	Leap::Vector indexFingerPosition;
+
+	if (frame.hands().count() == 1) {
+		palmPosition = rightHand.palmPosition();
+		indexFingerPosition = (rightHand.fingers())[1].tipPosition();
+	}
+	else {
+		palmPosition = leftHand.palmPosition();
+		indexFingerPosition = (leftHand.fingers())[1].tipPosition();
+	}
 
 	if (debug_on) {
-		std::cout << "Right Finger Position: (" << rightIndexFingerPosition.x << ", "
-			<< rightIndexFingerPosition.y << ", " << rightIndexFingerPosition.z << ")" << std::endl;
-		std::cout << "Right Hand Position: (" << rightPalmPosition.x << ", "
-			<< rightPalmPosition.y << ", " << rightPalmPosition.z << ")" << std::endl;
+		std::cout << "Right Finger Position: (" << indexFingerPosition.x << ", "
+			<< indexFingerPosition.y << ", " << indexFingerPosition.z << ")" << std::endl;
+		std::cout << "Right Hand Position: (" << palmPosition.x << ", "
+			<< palmPosition.y << ", " << palmPosition.z << ")" << std::endl;
 		std::cout << "Mode: " << inputMode << std::endl;
 	}
 
 	if (inputModeCallBack != NULL) {
-		events.push(EventHandler(inputMode, rightIndexFingerPosition.x, rightIndexFingerPosition.y,
-			rightIndexFingerPosition.z, rightPalmPosition.x, rightPalmPosition.y, rightPalmPosition.z));
+		events.push(EventHandler(inputMode, indexFingerPosition.x, indexFingerPosition.y,
+			indexFingerPosition.z, palmPosition.x, palmPosition.y, palmPosition.z));
 		// inputModeCallBack(inputMode, rightIndexFingerPosition.x, rightIndexFingerPosition.y,
 		// rightIndexFingerPosition.z, rightPalmPosition.x, rightPalmPosition.y, rightPalmPosition.z);
 	}
