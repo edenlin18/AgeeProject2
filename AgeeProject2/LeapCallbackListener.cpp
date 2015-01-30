@@ -16,7 +16,7 @@ void LeapCallbackListener::onFrame(const Controller& controller) {
 		frame = controller.frame();
 
 	// check for swipe gesture
-	if (hands.count() == 1 && hands[0].isRight() &&
+	if (hands.count() == 2 && hands[0].isRight() &&
 		(frame.gestures())[0].type() == Gesture::Type::TYPE_INVALID &&
 		(controller.frame().gestures())[0].type() == Gesture::Type::TYPE_SWIPE) {
 		unsigned int swipeDirection = Utility::computeSwipeDirection(controller.frame().gestures()[0]);
@@ -25,7 +25,7 @@ void LeapCallbackListener::onFrame(const Controller& controller) {
 		}
 	}
 	// check for input mode
-	else if (hands.count() == 2) {
+	else if (hands.count() == 1) {
 		unsigned int input_mode = Utility::computeInputMode(frame);
 		if (debug) {
 			std::cout << "This input is: " << input_mode << std::endl;

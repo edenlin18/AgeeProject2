@@ -8,11 +8,11 @@ inputModeCallBackFunction Utility::inputModeCallBack = NULL;
 concurrency::concurrent_queue<EventHandler> Utility::events;
 /*void Utility::registerSwipeLeftCallBack(swipeLeftCallBackFunction userSwipeLeftFunction) {
 	swipeLeftCallBack = userSwipeLeftFunction;
-}
+	}
 
-void Utility::registerSwipeUpCallBack(swipeUpCallBackFunction userSwipeUpFunction) {
+	void Utility::registerSwipeUpCallBack(swipeUpCallBackFunction userSwipeUpFunction) {
 	swipeUpCallBack = userSwipeUpFunction;
-}*/
+	}*/
 
 void Utility::registerSwipeCallBack(swipeCallBackFunction userSwipeFunction) {
 	swipeCallBack = userSwipeFunction;
@@ -77,7 +77,7 @@ bool Utility::computeInputMode(const Frame& frame) {
 	Leap::Hand leftHand = frame.hands().leftmost();
 
 	unsigned int rightHandFingers = 0;
-	unsigned int leftHandFingers = 0;
+	// unsigned int leftHandFingers = 0;
 	unsigned int inputMode = input_code::input_type::INVALID_MODE;
 
 	// check what fingers are extended in each hand
@@ -85,45 +85,60 @@ bool Utility::computeInputMode(const Frame& frame) {
 		if (rightHand.fingers()[counter].isExtended())
 			rightHandFingers += counter + 1;
 
-		if (leftHand.fingers()[counter].isExtended())
-			leftHandFingers += counter + 1;
+		// if (leftHand.fingers()[counter].isExtended())
+		// leftHandFingers += counter + 1;
 	}
 
 	if (debug_on) {
 		std::cout << "Right Hand Fingers: " << rightHandFingers << std::endl;
-		std::cout << "Left Hand Fingers: " << leftHandFingers << std::endl;
+		// std::cout << "Left Hand Fingers: " << leftHandFingers << std::endl;
 	}
 
 	// deciding mode
-	switch (leftHandFingers) {
-		case input_code::LEFT_HAND_OPEN:
-			switch (rightHandFingers) {
-				case 5:
-					inputMode = input_code::input_type::CURSOR_MODE;
-					break;
-				case 2:
-					inputMode = input_code::input_type::DRAW_MODE;
-					break;
-				case 15:
-					inputMode = input_code::input_type::TRACKBALL_MODE;
-					break;
-				default:
-					break;
-			}
+	switch (rightHandFingers) {
+		case 5:
+			inputMode = input_code::input_type::CURSOR_MODE;
 			break;
-
-		case input_code::LEFT_HAND_CLOSED:
-			switch (rightHandFingers) {
-				case 2:
-					inputMode = input_code::input_type::ERASE_MODE;
-					break;
-				default:
-					break;
-			}
+		case 2:
+			inputMode = input_code::input_type::DRAW_MODE;
+			break;
+		case 15:
+			inputMode = input_code::input_type::TRACKBALL_MODE;
 			break;
 		default:
 			break;
 	}
+
+	// deciding mode
+	/*switch (leftHandFingers) {
+		case input_code::LEFT_HAND_OPEN:
+		switch (rightHandFingers) {
+		case 5:
+		inputMode = input_code::input_type::CURSOR_MODE;
+		break;
+		case 2:
+		inputMode = input_code::input_type::DRAW_MODE;
+		break;
+		case 15:
+		inputMode = input_code::input_type::TRACKBALL_MODE;
+		break;
+		default:
+		break;
+		}
+		break;
+
+		case input_code::LEFT_HAND_CLOSED:
+		switch (rightHandFingers) {
+		case 2:
+		inputMode = input_code::input_type::ERASE_MODE;
+		break;
+		default:
+		break;
+		}
+		break;
+		default:
+		break;
+		}*/
 
 	Leap::Vector rightPalmPosition = rightHand.palmPosition();
 	Leap::Vector rightIndexFingerPosition = (rightHand.fingers())[1].tipPosition();
@@ -140,7 +155,7 @@ bool Utility::computeInputMode(const Frame& frame) {
 		events.push(EventHandler(inputMode, rightIndexFingerPosition.x, rightIndexFingerPosition.y,
 			rightIndexFingerPosition.z, rightPalmPosition.x, rightPalmPosition.y, rightPalmPosition.z));
 		// inputModeCallBack(inputMode, rightIndexFingerPosition.x, rightIndexFingerPosition.y,
-			// rightIndexFingerPosition.z, rightPalmPosition.x, rightPalmPosition.y, rightPalmPosition.z);
+		// rightIndexFingerPosition.z, rightPalmPosition.x, rightPalmPosition.y, rightPalmPosition.z);
 	}
 
 	return inputMode;
