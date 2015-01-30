@@ -17,6 +17,12 @@ std::vector<NodeInfo *> drawWorld::nodes;
 
 btCompoundShape* drawWorld::compound = new btCompoundShape();
 std::vector<btRigidBody*> drawWorld::bodies;
+btDiscreteDynamicsWorld* drawWorld::world;
+btDispatcher* drawWorld::dispatcher;
+btCollisionConfiguration* drawWorld::collisionConfig;
+btBroadphaseInterface* drawWorld::broadphase;
+btConstraintSolver* drawWorld::solver;
+bool drawWorld::rts = false;
 
 btTransform translate;
 btTransform rotate;
@@ -28,7 +34,7 @@ void drawWorld::init(){
 	// set up scene 
 	const int ReceivesShadowTraversalMask = 0x1;
 	const int CastsShadowTraversalMask = 0x2;
-	
+
 	// light, shadow, floor, etc
 	osg::ref_ptr<osg::LightSource> ls = new osg::LightSource;
 	ls->getLight()->setPosition(osg::Vec4(0, 1, 0, 0.0)); // make 4th coord 1 for point
@@ -44,14 +50,14 @@ void drawWorld::init(){
 	shadowScene->setShadowTechnique(sm.get());
 	shadowScene->addChild(ls.get());
 	shadowScene->addChild(scene.get());
-	
+
 	// floor
 	Matrixf m;
 	ref_ptr<MatrixTransform> mt = new MatrixTransform;
 	m.makeRotate(osg::inDegrees(90.0f), 1.0f, 0.0f, 0.0f);
 	mt->setMatrix(m);
 	//scene->addChild(createPlane(Vec3(0,0,0), Vec4(1.0,1.0,1.0,1.0), 20));
-	mt->addChild(createBase(Vec3(0, 0, 0), 20));
+	mt->addChild(createBase(Vec3(0.0, 0.0, -0.45), 20));
 	scene->addChild(mt);
 
 	// cursor
@@ -69,103 +75,79 @@ Node* drawWorld::getRoot(){
 }
 
 void drawWorld::draw() {
-	// mtx.lock();
-
-	/* DrawCue draw;
-	Vec3 _start;
-	Vec3 _end;
-
-	if (drawQ.try_pop(draw)) {
-		_start = draw.start;
-		_end = draw.end;
-	}
-	else {
-		return;
-	}*/
-
 	if (lastOne == NULL) {	// first time to draw
 		Matrixf m;
-		m.makeTranslate(start);
+		m.makeIdentity();
 		object = new MatrixTransform();
-		object->setDataVariance(osg::Object::DYNAMIC);
 		scene->addChild(object);
 		object->setMatrix(m);
-		rotate = addCylinderBetweenPoints(Vec3(0,0,0), end - start, RADIUS, currentColor, object);
-		ref_ptr<MatrixTransform> mt = new MatrixTransform();
-		mt->setDataVariance(osg::Object::DYNAMIC);
-		m.makeTranslate(end - start);
-		mt->setMatrix(m);
+
+		Vec3 center = (end + start) / 2;
+		m.makeTranslate(center);
+		ref_ptr<MatrixTransform> mt = new MatrixTransform;
+		
 		object->addChild(mt);
-		translate.setOrigin(btVector3(start[0], start[1], start[2]));
-		btTransform bt = translate*rotate; 
+		AngleAndAxis aaa = addCylinderBetweenPoints(start - center, end - center, RADIUS, currentColor, mt);	
+		Matrixf mq;
+		mq.setRotate(Quat(aaa.angle, aaa.axis));
+		mt->setMatrix(mq * m);
+
+		// calculating rotation for bt
+		btVector3 bt_t(aaa.axis[0], aaa.axis[1], aaa.axis[2]);
+		rotate.setIdentity();
+		rotate.setRotation(btQuaternion(bt_t, aaa.angle));
+
+		translate.setIdentity();
+		translate.setOrigin(btVector3(center[0], center[1], center[2]));
+		float height = (end - start).length();
+		lastOne = new NodeInfo(mt, center, end);
+		addCapsule(RADIUS, height - 2 * RADIUS, translate*rotate, lastOne);
 		// TODO add cylinder to compound
-		lastOne = new NodeInfo(mt, end, bt);
+		
 		nodes.push_back(lastOne);
 	}
 	else{
-		Vec3 d = start - lastOne->position;
-		/*
-		std::cout << "distance: " << d.length() << std::endl;
-		if (d.length() == 0) {
-			// ready = false;
-			return;
-		}
-
-		if (d.length() >= 1.0) {
-			NodeInfo * ni = searchNearest(start);
-			Vec3 t = cursor - ni->position;
-			offset = t / SENSITIVITY;
-			move(ni->position);
-			lastOne = ni;
-			start = ni->position;
-			end = end - (ni->position - cursor);
-			// ready = false;
-		}
-
-		move(end);
-		rotate = addCylinderBetweenPoints(Vec3(0, 0, 0), end - lastOne->position, RADIUS, currentColor, lastOne->node);
-		Matrixf m;
-		ref_ptr<MatrixTransform> mt = new MatrixTransform();
-		mt->setDataVariance(osg::Object::DYNAMIC);
-		Vec3 t = end - lastOne->position;
-		translate.setOrigin(btVector3(t[0], t[1], t[2]));
-		m.makeTranslate(t);
-		mt->setMatrix(m);
-		lastOne->node->addChild(mt);
-		btTransform bt = lastOne->bt * translate * rotate;
-		// TODO add cylinder to compound
-		lastOne = new NodeInfo(mt, end, bt);
-		nodes.push_back(lastOne);
-		// ready = false;
-		*/
+		Vec3 d = start - lastOne->end;
 
 		if (d.length() <= 0.3){	// continous drawing
 			move(end);
-			rotate = addCylinderBetweenPoints(Vec3(0,0,0), end - lastOne->position, RADIUS, currentColor, lastOne->node);
 			Matrixf m;
-			ref_ptr<MatrixTransform> mt = new MatrixTransform();
-			mt->setDataVariance(osg::Object::DYNAMIC);
-			Vec3 t = end - lastOne->position;
-			translate.setOrigin(btVector3(t[0], t[1], t[2]));
-			m.makeTranslate(t);
-			mt->setMatrix(m);
-			lastOne->node->addChild(mt);
-			btTransform bt = lastOne->bt * translate * rotate;
+			Vec3 center = (end + lastOne->end) / 2;
+			m.makeTranslate(center);
+			ref_ptr<MatrixTransform> mt = new MatrixTransform;
+			object->addChild(mt);
+
+			AngleAndAxis aaa = addCylinderBetweenPoints(lastOne->end - center, end - center, RADIUS, currentColor, mt);
+			Matrixf mq;
+			mq.setRotate(Quat(aaa.angle, aaa.axis));
+			mt->setMatrix(mq * m);
+			std::cout << "aaa angle: " << aaa.angle << "aaa axis: (" << aaa.axis[0] << ", " << aaa.axis[1] << ", " << aaa.axis[2] << ")" << std::endl;
+			// mmm.
+
+			// calculating rotation for bt
+			btVector3 bt_t(aaa.axis[0], aaa.axis[1], aaa.axis[2]);
+			rotate.setIdentity();
+			rotate.setRotation(btQuaternion(bt_t, aaa.angle));
+			//mt->setMatrix(m);
+			translate.setIdentity();
+			translate.setOrigin(btVector3(center[0], center[1], center[2]));
+			float height = (end - lastOne->end).length();
+			lastOne = new NodeInfo(mt, center, end);
+			addCapsule(RADIUS, height - 2 * RADIUS, translate * rotate, lastOne);
 			// TODO add cylinder to compound
-			lastOne = new NodeInfo(mt, end, bt);
+			
 			nodes.push_back(lastOne);
 		}
 		else{	// need to search the nearest point
 			NodeInfo * ni = searchNearest(start);
-			Vec3 t = cursor - ni->position;
+			Vec3 t = cursor - ni->end;
 			offset = t / SENSITIVITY;
-			move(ni->position);
+			move(ni->end);
 			lastOne = ni;
-			start = ni->position;
+			start = ni->end;
 			ready = true;
 		}
 	}
-	// mtx.unlock();
 }
 
 void drawWorld::erase(Vec3 start, Vec3 end){
@@ -210,7 +192,7 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 				ready = false;
 				draw();
 				// drawQ.push(DrawCue(start, end));
-				
+
 			}
 		}
 		else{
@@ -224,7 +206,11 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 		break;
 
 	case 3:	// trackball
-
+		std::cout << "yeah" << std::endl;
+		if (rts == false) {
+			drawWorld::initPhysics();
+			rts = true;
+		}
 		break;
 
 	case 4:	// invalid
@@ -239,7 +225,7 @@ NodeInfo * drawWorld::searchNearest(Vec3 point){
 	int nodes_size = nodes.size();
 	std::cout << "node size: " << nodes_size << std::endl;
 	for (int i = 0; i < nodes_size; i++) {
-		Vec3 d = point - nodes[i]->position;
+		Vec3 d = point - nodes[i]->end;
 		double distance = d.length();
 		if (distance <= THRESHOLD)
 			return nodes[i];
@@ -254,7 +240,7 @@ NodeInfo * drawWorld::searchNearest(Vec3 point){
 }
 
 
-btTransform drawWorld::addCylinderBetweenPoints(Vec3 StartPoint,Vec3 EndPoint, float radius, Vec4 CylinderColor,Group *pAddToThisGroup)
+AngleAndAxis drawWorld::addCylinderBetweenPoints(Vec3 StartPoint, Vec3 EndPoint, float radius, Vec4 CylinderColor, Group *pAddToThisGroup)
 {
 	ref_ptr<Geode> geode = new osg::Geode;
 	osg::Vec3	center;
@@ -274,17 +260,14 @@ btTransform drawWorld::addCylinderBetweenPoints(Vec3 StartPoint,Vec3 EndPoint, f
 
 	// Get CROSS product (the axis of rotation)
 	Vec3 t = z ^ p;
-	btVector3 bt_t(t[0], t[1], t[2]);
+	
 
 	// Get angle. length is magnitude of the vector
 	double angle = acos((z * p) / p.length());
-	btTransform bt;
-	bt.setIdentity();
-	bt.setRotation(btQuaternion(bt_t, angle));
+	std::cout << "aaaaaaa: " << angle << std::endl;
 
 	//	Create a cylinder between the two points with the given radius
 	cylinder = new Capsule(center, radius, height);
-	cylinder->setRotation(Quat(angle, Vec3(t.x(), t.y(), t.z())));
 
 	cylinderDrawable = new ShapeDrawable(cylinder);
 	geode->addDrawable(cylinderDrawable);
@@ -297,7 +280,7 @@ btTransform drawWorld::addCylinderBetweenPoints(Vec3 StartPoint,Vec3 EndPoint, f
 	//	Add the cylinder between the two points to an existing group
 	pAddToThisGroup->addChild(geode);
 
-	return bt;
+	return AngleAndAxis(angle, t);
 }
 
 
@@ -421,10 +404,131 @@ Node* drawWorld::createPlane(const Vec3& center, const Vec4& color, float radius
 	return geode;
 }
 
-btCylinderShape* drawWorld::addCylinder(float d, float h, btTransform& t)
+btCapsuleShape* drawWorld::addCapsule(btScalar radius, btScalar height, btTransform t, NodeInfo * info)
 {
-	btCylinderShape* cylinder = new btCylinderShape(btVector3(d / 2.0, h / 2.0, d / 2.0));
-	compound->addChildShape(t, cylinder);
+	btCapsuleShape* capsule = new btCapsuleShape(radius, height);
+	capsule->setUserPointer(info);
+	compound->addChildShape(t, capsule);
 
-	return cylinder;
+	return capsule;
+}
+
+void drawWorld::drawCompound(btRigidBody* shape){
+
+	//std::cout << shape->getShapeType() << std::endl;
+	
+	//if (shape->getShapeType() == COMPOUND_SHAPE_PROXYTYPE)
+	{
+		btCompoundShape * compoundshape = static_cast<btCompoundShape*>(shape->getCollisionShape());
+
+		// std::cout << "drawCompound" << std::endl;
+		btTransform child_trans;
+		btTransform child_trans2;
+		for (int j = compoundshape->getNumChildShapes() - 1; j >= 0; j--)
+		{
+			const btCollisionShape* col_shape = compoundshape->getChildShape(j);
+			child_trans = shape->getWorldTransform() * compoundshape->getChildTransform(j);
+			child_trans2 = compoundshape->getChildTransform(j);
+			// child_trans = compoundshape->getChildTransform(j);
+			 btQuaternion rotation = child_trans2.getRotation();
+			// btMatrix3x3 rotation = child_trans.getBasis();
+			
+			float angle = rotation.getAngle();
+			btVector3 axis = rotation.getAxis();
+			btVector3 translate = child_trans.getOrigin();
+
+			NodeInfo * info = (NodeInfo *)col_shape->getUserPointer();
+			btScalar * m = new btScalar[16];
+			
+			Matrixf osgM_translation;
+			osgM_translation.makeTranslate(Vec3(translate.getX(), translate.getY(), translate.getZ()));
+
+			// btVector3 x = rotation.getColumn(0);
+			// btVector3 y = rotation.getColumn(1);
+			// btVector3 z = rotation.getColumn(2);
+			// Matrixf osgM_rotation(x.getX(), y.getX(), z.getX(), 0, x.getY(), y.getY(), z.getY(), 0, x.getZ(), y.getZ(), z.getZ(), 0, 0, 0, 0, 1);
+			// Matrixf osgM_rotation(x.getX(), x.getY(), x.getZ(), 0, y.getX(), y.getY(), y.getZ(), 0, z.getX(), z.getY(), z.getZ(), 0, 0, 0, 0, 1);
+			// std::cout << "ROTATION MATRIX: " << x.getX() << ", " << x.getY() << ", " << x.getZ() << ", " << y.getX() << ", " << y.getY() << ", " << y.getZ() << ", " << z.getX() << ", " << z.getY() << ", " << z.getZ() << std::endl;
+			Matrixf osgM_rotation;
+			osgM_rotation.makeRotate(Quat(angle, Vec3(axis.getX(), axis.getY(), axis.getZ())));
+			//std::cout << "angle: " << angle << std::endl;
+			
+			// std::cout << "pass1" << std::endl;
+			// system("PAUSE");
+			// child_trans.getOpenGLMatrix(m);
+			// std::cout << "pass2" << std::endl;
+			// system("PAUSE");
+			// Matrixf osgM(m);
+			//std::cout << "pass3" << std::endl;
+			//system("PAUSE");
+			info->mt->setMatrix(osgM_rotation * osgM_translation);
+			std::cout << j << std::endl;
+			//info->mt->setMatrix
+		}
+	}
+}
+
+void drawWorld::initPhysics(){
+	// Setting up physics world
+	// Build the broadphase
+	broadphase = new btDbvtBroadphase();
+
+	// Set up the collision configuration and dispatcher
+	collisionConfig = new btSoftBodyRigidBodyCollisionConfiguration();
+	dispatcher = new btCollisionDispatcher(collisionConfig);
+
+	// The actual physics solver
+
+	solver = new btSequentialImpulseConstraintSolver;
+	
+
+	// The world
+	world = new btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfig);
+	world->setGravity(btVector3(0, -10, 0));
+
+	// Setting up ground
+	btTransform t;
+	t.setIdentity();
+	t.setOrigin(btVector3(0, 0, 0));
+	btCollisionShape* plane = new btStaticPlaneShape(btVector3(0, 1, 0), 1);
+	btDefaultMotionState* motion = new btDefaultMotionState(btTransform(btQuaternion(0, 0, 0, 1), btVector3(0, -1, 0)));
+	btRigidBody::btRigidBodyConstructionInfo info(0.0, motion, plane, btVector3(0, 0, 0));
+	//info.m_linearDamping = 0.2f;
+	info.m_restitution = 1.0f;
+	info.m_friction = 0.5f;
+	btRigidBody* body = new btRigidBody(info);
+	world->addRigidBody(body);
+	bodies.push_back(body);
+	body->setUserPointer(bodies[bodies.size() - 1]);
+
+
+	//add compound into our world
+	//btCollisionShape * compoundShape = new 
+	//bodies.push_back(compound);
+	btMotionState* motion2 = new btDefaultMotionState(t);
+	btRigidBody::btRigidBodyConstructionInfo info2(10, motion2, compound, btVector3(0, 0, 0));
+	info2.m_restitution = 0.1f;
+	info2.m_friction = 1.5f;
+	btRigidBody* b = new btRigidBody(info2);
+	world->addRigidBody(b);
+	bodies.push_back(b);
+	body->setUserPointer(bodies[bodies.size() - 1]);
+
+
+}
+
+void drawWorld::simulate(float dt){
+	world->stepSimulation(dt);
+
+	for (int i = 0; i < bodies.size(); i++){
+		if (bodies[i]->getCollisionShape()->getShapeType() == COMPOUND_SHAPE_PROXYTYPE){
+			drawCompound(bodies[i]);
+		}
+		//std::cout << bodies[i]->getShapeType() << std::endl;
+		//std::cout << i << std::endl;
+	}
+}
+
+bool drawWorld::readyToSimulate(){
+	return rts;
 }

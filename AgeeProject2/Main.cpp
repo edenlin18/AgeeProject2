@@ -32,9 +32,17 @@ int main(int argc, char *argv []) {
 	viewer.home();
 	// viewer.run();
 	viewer.realize();
-
+	osg::Timer_t frame_tick = osg::Timer::instance()->tick();
 	while (!viewer.done()) {
 		// drawWorld::draw();
+		if (drawWorld::readyToSimulate()){
+			osg::Timer_t now_tick = osg::Timer::instance()->tick();
+			float dt = osg::Timer::instance()->delta_s(frame_tick, now_tick);
+			frame_tick = now_tick;
+			drawWorld::simulate(dt);
+			// std::cout << "simulating" << std::endl;
+		}
+		
 		EventHandler current_event;
 		while (Utility::events.try_pop(current_event)) {
 			drawWorld::inputHandle(current_event.eventType, current_event.finger_x, 

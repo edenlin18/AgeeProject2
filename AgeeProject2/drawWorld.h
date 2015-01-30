@@ -29,6 +29,7 @@
 #include <btBulletDynamicsCommon.h>
 #include <LinearMath/btTransform.h>
 #include <BulletCollision\CollisionShapes\btCylinderShape.h>
+#include <BulletCollision\CollisionShapes\btCapsuleShape.h>
 #include <BulletCollision\CollisionShapes\btCompoundShape.h>
 #include <BulletSoftBody/btSoftRigidDynamicsWorld.h>
 #include <BulletSoftBody/btDefaultSoftBodySolver.h>
@@ -47,37 +48,49 @@
 using namespace osg;
 
 struct NodeInfo{
-	ref_ptr<MatrixTransform> node;
-	Vec3 position;
-	btTransform bt;
-	NodeInfo(ref_ptr<MatrixTransform> _node, Vec3 _position, btTransform _bt){
-		node = _node;
-		position = _position;
-		bt = _bt;
+	Vec3 end;
+	Vec3 center;
+	ref_ptr<MatrixTransform> mt;
+	NodeInfo(ref_ptr<MatrixTransform> _mt, Vec3 _center, Vec3 _end){
+		mt = _mt;
+		center = _center;
+		end = _end;
+	}
+};
+
+struct AngleAndAxis{
+	double angle;
+	Vec3 axis;
+	AngleAndAxis(double a, Vec3 ax){
+		angle = a;
+		axis = ax;
 	}
 };
 
 /* struct DrawCue {
-	Vec3 start;
-	Vec3 end;
-	DrawCue() { }
-	DrawCue(Vec3 _start, Vec3 _end) {
-		start = _start;
-		end = _end;
-	}
+Vec3 start;
+Vec3 end;
+DrawCue() { }
+DrawCue(Vec3 _start, Vec3 _end) {
+start = _start;
+end = _end;
+}
 };*/
 
 class drawWorld{
 
-public :
+public:
 	drawWorld(){};
 	static void init();
 	static Node* getRoot();
 	static void inputHandle(unsigned int mode, float finger_x, float finger_y, float finger_z,
 		float palm_x, float palm_y, float palm_z);
 	static void draw();
+	static void initPhysics();
+	static void simulate(float dt);
+	static bool readyToSimulate();
 
-private :
+private:
 	// static void draw(Vec3 _start, Vec3 _end);
 	static void erase(Vec3 _start, Vec3 _end);
 	static void move(Vec3);
@@ -85,12 +98,13 @@ private :
 	static Node* createBase(const osg::Vec3& center, float radius);
 	static Node* createPlane(const Vec3& center, const Vec4& color, float radius);
 	static void addSphere(Vec3 center, float radius, Vec4 CylinderColor, Group *pAddToThisGroup);
-	static btTransform addCylinderBetweenPoints(Vec3 StartPoint, Vec3 EndPoint, float radius, Vec4 CylinderColor, Group *pAddToThisGroup);
+	static AngleAndAxis addCylinderBetweenPoints(Vec3 StartPoint, Vec3 EndPoint, float radius, Vec4 CylinderColor, Group *pAddToThisGroup);
 	static NodeInfo * searchNearest(Vec3 point);
-	
+
 	//bullet functions
-	static btCylinderShape * addCylinder(float d, float h, btTransform& t);
-	
+	static btCapsuleShape* addCapsule(btScalar radius, btScalar height, btTransform t, NodeInfo* info);
+	static void drawCompound(btRigidBody* shape);
+
 
 	static ref_ptr<osgShadow::ShadowedScene> shadowScene;
 	static ref_ptr<Group> scene;
@@ -109,6 +123,12 @@ private :
 	//bullet variables
 	static btCompoundShape* compound;
 	static std::vector<btRigidBody*> bodies;
+	static btDiscreteDynamicsWorld* world;
+	static btDispatcher* dispatcher;
+	static btCollisionConfiguration* collisionConfig;
+	static btBroadphaseInterface* broadphase;
+	static btConstraintSolver* solver;
+	static bool rts;
 };
 
 #endif
