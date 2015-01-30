@@ -8,21 +8,33 @@ ref_ptr<MatrixTransform> drawWorld::object = NULL;
 NodeInfo* drawWorld::lastOne = NULL;
 ref_ptr<MatrixTransform> drawWorld::cursor_mt = NULL;
 Vec3 drawWorld::cursor;
+Vec3 drawWorld::cursor_color(0.1, 0.1, 0.8);
 Vec3 drawWorld::offset = Vec3(0, 0, 0);
 Vec3 drawWorld::start;
+Vec3 drawWorld::initStart;
 Vec3 drawWorld::end;
 bool drawWorld::ready = false;
 Vec4 drawWorld::currentColor(0.2, 0.8, 0.1, 1.0);
 std::vector<NodeInfo *> drawWorld::nodes;
+Geode * drawWorld::cursor_geode = NULL;
+Material * drawWorld::pMaterial = new Material();
 
 btCompoundShape* drawWorld::compound = new btCompoundShape();
 std::vector<btRigidBody*> drawWorld::bodies;
-btDiscreteDynamicsWorld* drawWorld::world;
-btDispatcher* drawWorld::dispatcher;
-btCollisionConfiguration* drawWorld::collisionConfig;
-btBroadphaseInterface* drawWorld::broadphase;
-btConstraintSolver* drawWorld::solver;
+
+btCollisionConfiguration* drawWorld::collisionConfig = new btSoftBodyRigidBodyCollisionConfiguration();
+btDispatcher* drawWorld::dispatcher = new btCollisionDispatcher(collisionConfig);
+btBroadphaseInterface* drawWorld::broadphase= new btDbvtBroadphase();
+btConstraintSolver* drawWorld::solver = new btSequentialImpulseConstraintSolver;
+btDiscreteDynamicsWorld* drawWorld::world = new btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfig);
+
 bool drawWorld::rts = false;
+
+
+
+
+// btRigidBody* drawWorld::compound_body;
+
 
 btTransform translate;
 btTransform rotate;
@@ -57,7 +69,7 @@ void drawWorld::init(){
 	m.makeRotate(osg::inDegrees(90.0f), 1.0f, 0.0f, 0.0f);
 	mt->setMatrix(m);
 	//scene->addChild(createPlane(Vec3(0,0,0), Vec4(1.0,1.0,1.0,1.0), 20));
-	mt->addChild(createBase(Vec3(0.0, 0.0, -0.45), 20));
+	mt->addChild(createBase(Vec3(0.0, 0.0, 0), 20));
 	scene->addChild(mt);
 
 	// cursor
@@ -66,7 +78,7 @@ void drawWorld::init(){
 	m.makeTranslate(0, 10, 0);
 	cursor_mt->setMatrix(m);
 	scene->addChild(cursor_mt);
-	addSphere(Vec3(0, 0, 0), 0.5, Vec4(1.0, 0, 0, 0.5), cursor_mt);
+	cursor_geode = addSphere(Vec3(0, 0, 0), 0.5, Vec4(0.1, 0.1, 0.8, 1.0), cursor_mt);
 	// addCylinderBetweenPoints(Vec3(0, 0, 5), Vec3(0, 5, 5), 1, Vec4(0, 1, 0, 1.0), scene);
 }
 
@@ -82,7 +94,20 @@ void drawWorld::draw() {
 		scene->addChild(object);
 		object->setMatrix(m);
 
+
+		/*
+		btTransform startTransform;
+		startTransform.setIdentity();
+		startTransform.setOrigin(btVector3(start[0], start[1], start[2]));
+
+		compound_body->setCenterOfMassTransform(startTransform);
+		*/
+		// initCompound(btVector3(start[0], start[1], start[2]));
+
+
+
 		Vec3 center = (end + start) / 2;
+		initStart = Vec3(0, 10, 0);
 		m.makeTranslate(center);
 		ref_ptr<MatrixTransform> mt = new MatrixTransform;
 		
@@ -99,9 +124,47 @@ void drawWorld::draw() {
 
 		translate.setIdentity();
 		translate.setOrigin(btVector3(center[0], center[1], center[2]));
-		float height = (end - start).length();
-		lastOne = new NodeInfo(mt, center, end);
-		addCapsule(RADIUS, height - 2 * RADIUS, translate*rotate, lastOne);
+		double height = (end - start).length();
+		lastOne = new NodeInfo(mt, center, end, NULL);
+		//btRigidBody * bodyNow = addCapsule(RADIUS, (height - 2 * RADIUS) * 0.99,height * MASS_PER_HEIGHT, translate*rotate, lastOne);
+		//lastOne->body = bodyNow;
+		addCapsule(RADIUS, (height - 2 * RADIUS) * 0.99, translate*rotate, lastOne);
+		/*
+		btVector3 localPivot = btVector3(end[0], end[1], end[2]);
+		btPoint2PointConstraint * p2p = new btPoint2PointConstraint(*bodyNow, localPivot);
+		world->addConstraint(p2p);
+		*/
+		
+		
+		
+
+		/*
+		btVector3 localPivot = btVector3(end[0], end[1], end[2]);
+		btTransform tr;
+		tr.setIdentity();
+		tr.setOrigin(localPivot);
+		btGeneric6DofConstraint* dof6 = new btGeneric6DofConstraint(*bodyNow, tr, true);
+		dof6->setLinearLowerLimit(btVector3(1, 1, 1));
+		dof6->setLinearUpperLimit(btVector3(0.9, 0.9, 0.9));
+		dof6->setAngularLowerLimit(btVector3(0, 0, 0));
+		dof6->setAngularUpperLimit(btVector3(0, 0, 0));
+		dof6->setParam(BT_CONSTRAINT_STOP_CFM, 0.0f, 0);
+		dof6->setParam(BT_CONSTRAINT_STOP_CFM, 0.0f, 1);
+		dof6->setParam(BT_CONSTRAINT_STOP_CFM, 0.0f, 2);
+		dof6->setParam(BT_CONSTRAINT_STOP_CFM, 0.1f, 3);
+		dof6->setParam(BT_CONSTRAINT_STOP_CFM, 0.1f, 4);
+		dof6->setParam(BT_CONSTRAINT_STOP_CFM, 0.1f, 5);
+
+		dof6->setParam(BT_CONSTRAINT_STOP_ERP, 1.0f, 0);
+		dof6->setParam(BT_CONSTRAINT_STOP_ERP, 1.0f, 1);
+		dof6->setParam(BT_CONSTRAINT_STOP_ERP, 1.0f, 2);
+		dof6->setParam(BT_CONSTRAINT_STOP_ERP, 1.0f, 3);
+		dof6->setParam(BT_CONSTRAINT_STOP_ERP, 1.0f, 4);
+		dof6->setParam(BT_CONSTRAINT_STOP_ERP, 1.0f, 5);
+		world->addConstraint(dof6);
+		*/
+
+		
 		// TODO add cylinder to compound
 		
 		nodes.push_back(lastOne);
@@ -132,8 +195,57 @@ void drawWorld::draw() {
 			translate.setIdentity();
 			translate.setOrigin(btVector3(center[0], center[1], center[2]));
 			float height = (end - lastOne->end).length();
-			lastOne = new NodeInfo(mt, center, end);
-			addCapsule(RADIUS, height - 2 * RADIUS, translate * rotate, lastOne);
+
+			NodeInfo * nodeCurrent = new NodeInfo(mt, center, end, NULL);
+			
+			//btRigidBody * bodyNow = addCapsule(RADIUS, (height - 2 * RADIUS) * 0.99, height * MASS_PER_HEIGHT, translate*rotate, nodeCurrent);
+			addCapsule(RADIUS, (height - 2 * RADIUS) * 0.99, translate*rotate, nodeCurrent);
+			//nodeCurrent->body = bodyNow;
+			btRigidBody * bodyLast = lastOne->body;
+			
+			
+
+			/*
+			btVector3 localPivot = btVector3(end[0], end[1], end[2]);
+			btPoint2PointConstraint * p2p = new btPoint2PointConstraint(*bodyNow, localPivot);
+			world->addConstraint(p2p);
+			*/
+
+			/*
+			btVector3 localPivot = btVector3(end[0], end[1], end[2]);
+			btTransform tr;
+			tr.setIdentity();
+			tr.setOrigin(localPivot);
+			btGeneric6DofConstraint* dof6 = new btGeneric6DofConstraint(*bodyNow, tr, true);
+			dof6->setLinearLowerLimit(btVector3(1, 1, 1));
+			dof6->setLinearUpperLimit(btVector3(0.9, 0.9, 0.9));
+			dof6->setAngularLowerLimit(btVector3(0, 0, 0));
+			dof6->setAngularUpperLimit(btVector3(0, 0, 0));
+			dof6->setParam(BT_CONSTRAINT_STOP_CFM, 0.0f, 0);
+			dof6->setParam(BT_CONSTRAINT_STOP_CFM, 0.0f, 1);
+			dof6->setParam(BT_CONSTRAINT_STOP_CFM, 0.0f, 2);
+			dof6->setParam(BT_CONSTRAINT_STOP_CFM, 0.1f, 3);
+			dof6->setParam(BT_CONSTRAINT_STOP_CFM, 0.1f, 4);
+			dof6->setParam(BT_CONSTRAINT_STOP_CFM, 0.1f, 5);
+
+			dof6->setParam(BT_CONSTRAINT_STOP_ERP, 1.0f, 0);
+			dof6->setParam(BT_CONSTRAINT_STOP_ERP, 1.0f, 1);
+			dof6->setParam(BT_CONSTRAINT_STOP_ERP, 1.0f, 2);
+			dof6->setParam(BT_CONSTRAINT_STOP_ERP, 1.0f, 3);
+			dof6->setParam(BT_CONSTRAINT_STOP_ERP, 1.0f, 4);
+			dof6->setParam(BT_CONSTRAINT_STOP_ERP, 1.0f, 5);
+			world->addConstraint(dof6);
+			*/
+			/*
+			btVector3 pivotA((lastOne->end)[0], (lastOne->end)[1], (lastOne->end)[2]);
+			btVector3 pivotB = pivotA;
+			Vec3 dirA = lastOne->end - lastOne->center;
+			Vec3 dirB = end - lastOne->end;
+			Vec3 axis = dirA ^ dirB;
+			btVector3 btAxis(axis[0], axis[1], axis[2]);
+			addHingeConstraint(*bodyLast, *bodyNow, pivotA, btAxis, btAxis);
+			*/
+			lastOne = nodeCurrent;
 			// TODO add cylinder to compound
 			
 			nodes.push_back(lastOne);
@@ -169,6 +281,8 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 	switch (mode){
 	case 0: // cursor
 	{
+		pMaterial->setDiffuse(Material::FRONT, Vec4(0.1,0.1,0.8,1.0));
+		cursor_geode->getOrCreateStateSet()->setAttribute(pMaterial, StateAttribute::OVERRIDE);
 		ready = false;
 		Vec3 t = Vec3(palm_x, palm_y, palm_z);
 		t -= offset;
@@ -189,6 +303,8 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 			float dis = d.length();
 			// std::cout << "end - start: " << dis << std::endl;
 			if (dis > 1.0) {
+				pMaterial->setDiffuse(Material::FRONT, Vec4(0.8, 0.1, 0.1, 1.0));
+				cursor_geode->getOrCreateStateSet()->setAttribute(pMaterial, StateAttribute::OVERRIDE);
 				ready = false;
 				draw();
 				// drawQ.push(DrawCue(start, end));
@@ -207,7 +323,9 @@ void drawWorld::inputHandle(unsigned int mode, float finger_x, float finger_y, f
 
 	case 3:	// trackball
 		std::cout << "yeah" << std::endl;
-		if (rts == false) {
+		pMaterial->setDiffuse(Material::FRONT, Vec4(0.1, 0.1, 0.8, 1.0));
+		cursor_geode->getOrCreateStateSet()->setAttribute(pMaterial, StateAttribute::OVERRIDE);
+		if (rts == false && lastOne != NULL) {
 			drawWorld::initPhysics();
 			rts = true;
 		}
@@ -284,7 +402,7 @@ AngleAndAxis drawWorld::addCylinderBetweenPoints(Vec3 StartPoint, Vec3 EndPoint,
 }
 
 
-void drawWorld::addSphere(Vec3 center, float radius, Vec4 CylinderColor, Group *pAddToThisGroup)
+Geode* drawWorld::addSphere(Vec3 center, float radius, Vec4 CylinderColor, Group *pAddToThisGroup)
 {
 	ref_ptr<Geode> geode = new osg::Geode;
 	ref_ptr<Sphere> sphere;
@@ -304,6 +422,7 @@ void drawWorld::addSphere(Vec3 center, float radius, Vec4 CylinderColor, Group *
 
 	//	Add the cylinder between the two points to an existing group
 	pAddToThisGroup->addChild(geode);
+	return geode;
 }
 
 Node* drawWorld::createBase(const osg::Vec3& center, float radius)
@@ -413,6 +532,20 @@ btCapsuleShape* drawWorld::addCapsule(btScalar radius, btScalar height, btTransf
 	return capsule;
 }
 
+btRigidBody* drawWorld::addCapsule(btScalar radius, btScalar height, float mass, btTransform t, NodeInfo* info) {
+	btCapsuleShape* capsule = new btCapsuleShape(radius, height);
+	capsule->setUserPointer(info);
+	btVector3 inertia(0, 0, 0);
+	if (mass != 0.0)
+		capsule->calculateLocalInertia(mass, inertia);
+	btMotionState* motion = new btDefaultMotionState(t);
+	btRigidBody::btRigidBodyConstructionInfo btinfo(mass, motion, capsule, inertia);
+	btRigidBody* body = new btRigidBody(btinfo);
+	world->addRigidBody(body);
+	bodies.push_back(body);
+	return body;
+}
+
 void drawWorld::drawCompound(btRigidBody* shape){
 
 	//std::cout << shape->getShapeType() << std::endl;
@@ -428,7 +561,7 @@ void drawWorld::drawCompound(btRigidBody* shape){
 		{
 			const btCollisionShape* col_shape = compoundshape->getChildShape(j);
 			child_trans = shape->getWorldTransform() * compoundshape->getChildTransform(j);
-			child_trans2 = compoundshape->getChildTransform(j);
+			child_trans2 = shape->getWorldTransform() *compoundshape->getChildTransform(j);
 			// child_trans = compoundshape->getChildTransform(j);
 			 btQuaternion rotation = child_trans2.getRotation();
 			// btMatrix3x3 rotation = child_trans.getBasis();
@@ -437,8 +570,9 @@ void drawWorld::drawCompound(btRigidBody* shape){
 			btVector3 axis = rotation.getAxis();
 			btVector3 translate = child_trans.getOrigin();
 
+
 			NodeInfo * info = (NodeInfo *)col_shape->getUserPointer();
-			btScalar * m = new btScalar[16];
+			// btScalar * m = new btScalar[16];
 			
 			Matrixf osgM_translation;
 			osgM_translation.makeTranslate(Vec3(translate.getX(), translate.getY(), translate.getZ()));
@@ -468,24 +602,56 @@ void drawWorld::drawCompound(btRigidBody* shape){
 	}
 }
 
+void drawWorld::drawRigidBody() {
+	for (int i = 0; i < bodies.size(); i++) {
+		btRigidBody * body = (btRigidBody *) bodies[i];
+		if (body->getCollisionShape()->getShapeType() != STATIC_PLANE_PROXYTYPE) {
+			const btCollisionShape* col_shape = body->getCollisionShape();
+			btTransform child_trans;
+			body->getMotionState()->getWorldTransform(child_trans);
+
+			// child_trans = compoundshape->getChildTransform(j);
+			btQuaternion rotation = child_trans.getRotation();
+			// btMatrix3x3 rotation = child_trans.getBasis();
+
+			float angle = rotation.getAngle();
+			btVector3 axis = rotation.getAxis();
+			btVector3 translate = child_trans.getOrigin();
+
+			NodeInfo * info = (NodeInfo *) col_shape->getUserPointer();
+			btScalar * m = new btScalar[16];
+
+			Matrixf osgM_translation;
+			osgM_translation.makeTranslate(Vec3(translate.getX(), translate.getY(), translate.getZ()));
+
+			// btVector3 x = rotation.getColumn(0);
+			// btVector3 y = rotation.getColumn(1);
+			// btVector3 z = rotation.getColumn(2);
+			// Matrixf osgM_rotation(x.getX(), y.getX(), z.getX(), 0, x.getY(), y.getY(), z.getY(), 0, x.getZ(), y.getZ(), z.getZ(), 0, 0, 0, 0, 1);
+			// Matrixf osgM_rotation(x.getX(), x.getY(), x.getZ(), 0, y.getX(), y.getY(), y.getZ(), 0, z.getX(), z.getY(), z.getZ(), 0, 0, 0, 0, 1);
+			// std::cout << "ROTATION MATRIX: " << x.getX() << ", " << x.getY() << ", " << x.getZ() << ", " << y.getX() << ", " << y.getY() << ", " << y.getZ() << ", " << z.getX() << ", " << z.getY() << ", " << z.getZ() << std::endl;
+			Matrixf osgM_rotation;
+			osgM_rotation.makeRotate(Quat(angle, Vec3(axis.getX(), axis.getY(), axis.getZ())));
+			//std::cout << "angle: " << angle << std::endl;
+
+			// std::cout << "pass1" << std::endl;
+			// system("PAUSE");
+			// child_trans.getOpenGLMatrix(m);
+			// std::cout << "pass2" << std::endl;
+			// system("PAUSE");
+			// Matrixf osgM(m);
+			//std::cout << "pass3" << std::endl;
+			//system("PAUSE");
+			info->mt->setMatrix(osgM_rotation * osgM_translation);
+			std::cout << i << std::endl;
+		}
+
+	}
+}
+
 void drawWorld::initPhysics(){
-	// Setting up physics world
-	// Build the broadphase
-	broadphase = new btDbvtBroadphase();
-
-	// Set up the collision configuration and dispatcher
-	collisionConfig = new btSoftBodyRigidBodyCollisionConfiguration();
-	dispatcher = new btCollisionDispatcher(collisionConfig);
-
-	// The actual physics solver
-
-	solver = new btSequentialImpulseConstraintSolver;
 	
-
-	// The world
-	world = new btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfig);
 	world->setGravity(btVector3(0, -10, 0));
-
 	// Setting up ground
 	btTransform t;
 	t.setIdentity();
@@ -500,26 +666,49 @@ void drawWorld::initPhysics(){
 	world->addRigidBody(body);
 	bodies.push_back(body);
 	body->setUserPointer(bodies[bodies.size() - 1]);
-
+	
+#ifdef SHIFT_TRANSFORM
+	btVector3 localInertia(0, 0, 0);
+	btTransform startTransform;
+	startTransform.setIdentity();
+	btTransform shift;
+	shift.setIdentity();
+	btCompoundShape* newBoxCompound = shiftTransform(compound, 30, shift);
+	newBoxCompound->calculateLocalInertia(30, localInertia);
+	btDefaultMotionState* myMotionState = new btDefaultMotionState(startTransform*shift);
+	btRigidBody::btRigidBodyConstructionInfo rbInfo(30, myMotionState, newBoxCompound, localInertia);
+#else
+	boxCompound->calculateLocalInertia(mass, localInertia);
+	btDefaultMotionState* myMotionState = new btDefaultMotionState(startTransform);
+	btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, myMotionState, boxCompound, localInertia);
+#endif
 
 	//add compound into our world
-	//btCollisionShape * compoundShape = new 
-	//bodies.push_back(compound);
-	btMotionState* motion2 = new btDefaultMotionState(t);
-	btRigidBody::btRigidBodyConstructionInfo info2(10, motion2, compound, btVector3(0, 0, 0));
-	info2.m_restitution = 0.1f;
-	info2.m_friction = 1.5f;
-	btRigidBody* b = new btRigidBody(info2);
-	world->addRigidBody(b);
-	bodies.push_back(b);
-	body->setUserPointer(bodies[bodies.size() - 1]);
+	//btMotionState* motion2 = new btDefaultMotionState(t);
+	//btRigidBody::btRigidBodyConstructionInfo info2(10, motion2, compound, btVector3(0, 0, 0));
+	//info2.m_restitution = 0.1f;
+	//info2.m_friction = 1.5f;
+	Vec3 center = (end + start) / 2;
+	btRigidBody * compound_body = new btRigidBody(rbInfo);
+	startTransform.setIdentity();
+	startTransform.setOrigin(btVector3(initStart[0], initStart[1], initStart[2]));
 
+	compound_body->setCenterOfMassTransform(startTransform);
+	compound_body->setAngularFactor(btVector3(1, 1, 1));
+	compound_body->setLinearFactor(btVector3(1, 1, 0.5f));
+	compound_body->setDamping(0.9, 0.3);
+	compound_body->setRestitution(0.3f);
+	compound_body->setFriction(0.4);
+	compound_body->forceActivationState(DISABLE_DEACTIVATION);
+	world->addRigidBody(compound_body);
+	bodies.push_back(compound_body);
+	//compound = new btCompoundShape();
 
 }
 
 void drawWorld::simulate(float dt){
 	world->stepSimulation(dt);
-
+	///*
 	for (int i = 0; i < bodies.size(); i++){
 		if (bodies[i]->getCollisionShape()->getShapeType() == COMPOUND_SHAPE_PROXYTYPE){
 			drawCompound(bodies[i]);
@@ -527,8 +716,121 @@ void drawWorld::simulate(float dt){
 		//std::cout << bodies[i]->getShapeType() << std::endl;
 		//std::cout << i << std::endl;
 	}
+	//*/
+	//drawRigidBody();
 }
 
 bool drawWorld::readyToSimulate(){
 	return rts;
+}
+
+void drawWorld::initCompound(btVector3 start) {
+
+#ifdef SHIFT_TRANSFORM
+	btVector3 localInertia(0, 0, 0);
+	btTransform startTransform;
+	startTransform.setIdentity();
+	btTransform shift;
+	shift.setIdentity();
+	btCompoundShape* newBoxCompound = shiftTransform(compound, 30, shift);
+	newBoxCompound->calculateLocalInertia(30, localInertia);
+	btDefaultMotionState* myMotionState = new btDefaultMotionState(startTransform*shift);
+	btRigidBody::btRigidBodyConstructionInfo rbInfo(30, myMotionState, newBoxCompound, localInertia);
+#else
+	boxCompound->calculateLocalInertia(mass, localInertia);
+	btDefaultMotionState* myMotionState = new btDefaultMotionState(startTransform);
+	btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, myMotionState, boxCompound, localInertia);
+#endif
+
+	//add compound into our world
+	//btMotionState* motion2 = new btDefaultMotionState(t);
+	//btRigidBody::btRigidBodyConstructionInfo info2(10, motion2, compound, btVector3(0, 0, 0));
+	//info2.m_restitution = 0.1f;
+	//info2.m_friction = 1.5f;
+	btRigidBody* compound_body = new btRigidBody(rbInfo);
+	startTransform.setIdentity();
+	startTransform.setOrigin(start);
+
+	compound_body->setCenterOfMassTransform(startTransform);
+	compound_body->setAngularFactor(btVector3(1, 1, 1));
+	compound_body->setLinearFactor(btVector3(1, 1, 0.5f));
+	compound_body->setDamping(0.9, 0.3);
+	compound_body->setRestitution(0.3f);
+	compound_body->setFriction(0.4);
+	compound_body->forceActivationState(DISABLE_DEACTIVATION);
+	world->addRigidBody(compound_body);
+	bodies.push_back(compound_body);
+	//compound = new btCompoundShape();
+}
+
+void drawWorld::addHingeConstraint(btRigidBody &rbA, btRigidBody &rbB, btVector3 &anchor, btVector3 &axis1, btVector3 &axis2) {
+	btHinge2Constraint * constraint = new btHinge2Constraint(rbA, rbB, anchor, axis1, axis2);
+	//btHingeConstraint * constraint = new btHingeConstraint(*a, pivotInA, axisInA, useReferenceFrameA);
+	//constraint->setLimit(0.0f, 0.0f);
+	/*constraint->setLimit(0.1,
+		0.2,
+		1.0f,
+		0.3f,
+		0.0f);*/
+	world->addConstraint(constraint);
+	//constraint->setDbgDrawSize(btScalar(5.f));
+}
+
+btCompoundShape* drawWorld::shiftTransform(btCompoundShape* boxCompound, btScalar mass, btTransform& shift) {
+	btTransform principal;
+	btVector3 principalInertia;
+	btScalar* masses = new btScalar[boxCompound->getNumChildShapes()];
+	for (int j = 0; j<boxCompound->getNumChildShapes(); j++) {
+		//evenly distribute mass
+		masses[j] = mass / boxCompound->getNumChildShapes();
+	}
+
+
+	boxCompound->calculatePrincipalAxisTransform(masses, principal, principalInertia);
+
+
+	///create a new compound with world transform/center of mass properly aligned with the principal axis
+
+	///non-recursive compound shapes perform better
+
+#ifdef USE_RECURSIVE_COMPOUND
+
+	btCompoundShape* newCompound = new btCompoundShape();
+	newCompound->addChildShape(principal.inverse(), boxCompound);
+	newBoxCompound = newCompound;
+	//m_collisionShapes.push_back(newCompound);
+
+	//btDefaultMotionState* myMotionState = new btDefaultMotionState(startTransform);
+	//btRigidBody::btRigidBodyConstructionInfo rbInfo(mass,myMotionState,newCompound,principalInertia);
+
+#else
+#ifdef CHANGE_COMPOUND_INPLACE
+	newBoxCompound = boxCompound;
+	for (int i = 0; i<boxCompound->getNumChildShapes(); i++) {
+		btTransform newChildTransform = principal.inverse()*boxCompound->getChildTransform(i);
+		///updateChildTransform is really slow, because it re-calculates the AABB each time. todo: add option to disable this update
+		boxCompound->updateChildTransform(i, newChildTransform);
+	}
+	bool isDynamic = (mass != 0.f);
+	btVector3 localInertia(0, 0, 0);
+	if (isDynamic)
+		boxCompound->calculateLocalInertia(mass, localInertia);
+
+#else
+	///creation is faster using a new compound to store the shifted children
+	btCompoundShape * newBoxCompound = new btCompoundShape();
+	for (int i = 0; i<boxCompound->getNumChildShapes(); i++) {
+		btTransform newChildTransform = principal.inverse()*boxCompound->getChildTransform(i);
+		///updateChildTransform is really slow, because it re-calculates the AABB each time. todo: add option to disable this update
+		newBoxCompound->addChildShape(newChildTransform, boxCompound->getChildShape(i));
+	}
+
+
+
+#endif
+
+#endif//USE_RECURSIVE_COMPOUND
+
+	shift = principal;
+	return newBoxCompound;
 }
